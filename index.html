@@ -200,6 +200,14 @@
         }
         #floating-banner:hover { transform: translateY(-10px) scale(1.05); }
 
+        /* 실시간 랭킹 보기 추가 UI */
+        #floating-ranking-board {
+            position: fixed; bottom: 110px; right: 30px; background: #1E1E23;
+            color: white; padding: 15px 25px; border-radius: 50px; font-size: 1.2em; font-weight: 800;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2); cursor: pointer; transition: transform 0.3s; z-index: 1000;
+        }
+        #floating-ranking-board:hover { transform: translateY(-5px) scale(1.05); }
+
         #ranking-modal-overlay {
             display:none; position:fixed; top:0; left:0; width:100%; height:100%;
             background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;
@@ -231,6 +239,7 @@
 
 <div id="app">
     <!-- 🏆 플로팅 배너 (랭킹전 진입) -->
+    <div id="floating-ranking-board" onclick="showLeaderboardOnly()">📊 실시간 랭킹 보기</div>
     <div id="floating-banner" onclick="openRankingModal()">🏆 전국 1위 도전! 랭킹전 입장</div>
 
     <!-- 랭킹전 학교 및 학급 정보 입력 모달 -->
@@ -239,11 +248,15 @@
             <h2 style="font-size: 1.8em; color: #1E1E23; margin-bottom: 10px; margin-top:0;">🏆 전국 학급 랭킹전</h2>
             <p style="color: #767678; margin-bottom: 30px;">우리 학교와 반을 선택하고 점수를 올려보세요!</p>
 
-            <div style="display:flex; gap:10px; margin-bottom:10px; width: 100%; box-sizing: border-box;">
-                <input type="text" id="school-search-input" placeholder="초등학교 이름 검색 (예: 해빛)" style="flex:1; padding:15px; border-radius:12px; border:2px solid #E3E5E8; font-size:1.3em; box-sizing:border-box; outline:none; min-width:0;" onkeyup="searchSchool(this.value)">
-                <button onclick="searchSchool(document.getElementById('school-search-input').value)" style="background:#1E1E23; color:white; border:none; padding:0 20px; font-size:1.1em; font-weight:800; border-radius:12px; cursor:pointer; white-space:nowrap;">검색</button>
+            <!-- 수정됨: 자동완성 결과창의 크기 변동 문제를 position: relative로 감싸 해결 -->
+            <div style="position: relative; width: 100%; margin-bottom: 10px; box-sizing: border-box;">
+                <div style="display:flex; gap:10px; width: 100%; box-sizing: border-box;">
+                    <input type="text" id="school-search-input" placeholder="초등학교 이름 검색 (예: 해빛)" style="flex:1; padding:15px; border-radius:12px; border:2px solid #E3E5E8; font-size:1.3em; box-sizing:border-box; outline:none; min-width:0;" onkeyup="searchSchool(this.value)">
+                    <button onclick="searchSchool(document.getElementById('school-search-input').value)" style="background:#1E1E23; color:white; border:none; padding:0 20px; font-size:1.1em; font-weight:800; border-radius:12px; cursor:pointer; white-space:nowrap;">검색</button>
+                </div>
+                <!-- 수정됨: position: absolute를 주어 아래 요소들을 밀어내지 않게 설정 -->
+                <ul id="school-search-results" style="list-style:none; padding:0; margin:0; max-height:180px; overflow-y:auto; text-align:left; border-radius:12px; border:1px solid #E3E5E8; display:none; background:#fff; position: absolute; top: 100%; left: 0; width: 100%; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: 5px;"></ul>
             </div>
-            <ul id="school-search-results" style="list-style:none; padding:0; margin:0; max-height:180px; overflow-y:auto; text-align:left; border-radius:12px; border:1px solid #E3E5E8; display:none; margin-bottom:20px; background:#fff;"></ul>
 
             <div style="display:flex; gap:10px; margin-bottom:30px; width: 100%; box-sizing: border-box;">
                 <input type="number" id="grade-input" placeholder="학년" class="custom-timer-input" style="flex:1; padding:15px; border-radius:12px; border:2px solid #E3E5E8; font-size:1.3em; text-align:center; box-sizing:border-box; min-width:0;">
@@ -385,8 +398,7 @@
     let currentClassId = "";
 
     window.onload = () => {
-        // 사용자가 오타로 저장했을 수 있는 파일명과 올바른 파일명 모두 시도
-        fetch('elementaryschooldata.json')
+        fetch('elemetaryschooldata.json')
             .then(res => res.ok ? res.json() : Promise.reject())
             .catch(() => fetch('elementaryschooldata.json').then(res => res.json()))
             .then(data => { schoolList = data; })
@@ -491,8 +503,10 @@
         document.getElementById('summary-screen').style.display = 'none';
         document.getElementById('type-screen').style.display = 'flex';
         document.getElementById('floating-banner').style.display = 'block';
+        document.getElementById('floating-ranking-board').style.display = 'block';
         document.getElementById('student-answer-area').style.display = 'none';
         document.getElementById('teacher-buttons').style.display = 'flex';
+        document.getElementById('btn-restart').style.display = 'inline-block';
         isRankingMode = false;
     }
 
@@ -501,7 +515,9 @@
         isRankingMode = false;
         document.getElementById('type-screen').style.display = 'none';
         document.getElementById('floating-banner').style.display = 'none';
+        document.getElementById('floating-ranking-board').style.display = 'none';
         document.getElementById('current-type-title').innerText = typeTitles[type];
+        document.getElementById('btn-restart').style.display = 'inline-block';
         generateRound(type);
     }
 
@@ -519,11 +535,25 @@
 
         document.getElementById('type-screen').style.display = 'none';
         document.getElementById('floating-banner').style.display = 'none';
+        document.getElementById('floating-ranking-board').style.display = 'none';
         document.getElementById('teacher-buttons').style.display = 'none';
         document.getElementById('student-answer-area').style.display = 'flex';
         document.getElementById('current-type-title').innerText = typeTitles['ranking_mix'];
+        document.getElementById('btn-restart').style.display = 'inline-block';
         
         generateRound('ranking_mix');
+    }
+    
+    // --- 실시간 랭킹 차트 보기 전용 모드 ---
+    function showLeaderboardOnly() {
+        document.getElementById('type-screen').style.display = 'none';
+        document.getElementById('floating-banner').style.display = 'none';
+        document.getElementById('floating-ranking-board').style.display = 'none';
+        document.getElementById('summary-screen').style.display = 'block';
+        document.getElementById('summary-main-title').innerText = "🏆 전국 학급 실시간 랭킹";
+        document.getElementById('summary-list').innerHTML = `<h3 style="grid-column: 1 / -1; text-align:center; padding: 40px;">랭킹 데이터를 불러오는 중입니다... 🔄</h3>`;
+        document.getElementById('btn-restart').style.display = 'none'; 
+        loadLeaderboard(true);
     }
 
     function generateProblemData(type) {
@@ -708,23 +738,27 @@
             classNum: document.getElementById('class-input').value,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true })
-        .then(() => { loadLeaderboard(); })
+        .then(() => { loadLeaderboard(false); })
         .catch(err => {
             document.getElementById('summary-list').innerHTML = `<h3 style="grid-column: 1 / -1; text-align:center; color:#FF5252;">데이터 기록 실패. 인터넷 연결을 확인하세요.</h3>`;
         });
     }
 
-    function loadLeaderboard() {
+    function loadLeaderboard(isViewOnly = false) {
         db.collection('classRankings').orderBy('score', 'desc').limit(10).get()
         .then(snap => {
             let html = `<div style="grid-column: 1 / -1; background:#fff; border-radius:16px; padding:30px; border:2px solid #E8F9EE;">`;
-            html += `<h3 style="color:#03C75A; margin-bottom:30px; text-align:center; font-size:2em;">🎉 방금 획득한 점수: +${rankingScore.toLocaleString()}점</h3>`;
+            if (!isViewOnly) {
+                html += `<h3 style="color:#03C75A; margin-bottom:30px; text-align:center; font-size:2em;">🎉 방금 획득한 점수: +${rankingScore.toLocaleString()}점</h3>`;
+            } else {
+                html += `<h3 style="color:#03C75A; margin-bottom:30px; text-align:center; font-size:2em;">🏆 전국 TOP 10 명예의 전당</h3>`;
+            }
             html += '<ul style="list-style:none; padding:0; margin:0;">';
 
             let rank = 1;
             snap.forEach(doc => {
                 let d = doc.data();
-                let isMyClass = (doc.id === currentClassId);
+                let isMyClass = (!isViewOnly && doc.id === currentClassId);
                 let bg = isMyClass ? '#E8F9EE' : '#F8F9FA';
                 let border = isMyClass ? '2px solid #03C75A' : '1px solid #E3E5E8';
                 
@@ -737,8 +771,14 @@
                 </li>`;
                 rank++;
             });
+            if (snap.empty) {
+                html += `<li style="text-align:center; padding:20px; font-size:1.2em; color:#767678;">아직 등록된 랭킹이 없습니다. 첫 번째로 도전해보세요!</li>`;
+            }
             html += '</ul></div>';
             document.getElementById('summary-list').innerHTML = html;
+        })
+        .catch(err => {
+            document.getElementById('summary-list').innerHTML = `<h3 style="grid-column: 1 / -1; text-align:center; color:#FF5252;">데이터를 불러오지 못했습니다. 인터넷 연결을 확인하세요.</h3>`;
         });
     }
 
