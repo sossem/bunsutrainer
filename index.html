@@ -386,7 +386,7 @@
 
     window.onload = () => {
         // 사용자가 오타로 저장했을 수 있는 파일명과 올바른 파일명 모두 시도
-        fetch('elemetaryschooldata.json')
+        fetch('elementaryschooldata.json')
             .then(res => res.ok ? res.json() : Promise.reject())
             .catch(() => fetch('elementaryschooldata.json').then(res => res.json()))
             .then(data => { schoolList = data; })
