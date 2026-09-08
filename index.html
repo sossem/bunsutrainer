@@ -68,12 +68,14 @@
         }
 
         /* -------------------------------------------
-           타이머 설정 버튼 스타일
+           타이머 설정 버튼 및 커스텀 입력 스타일
         ------------------------------------------- */
         .timer-options {
             display: flex;
             gap: 12px;
             justify-content: flex-start;
+            flex-wrap: wrap; 
+            align-items: center;
         }
         .btn-timer {
             font-family: inherit;
@@ -98,6 +100,48 @@
             box-shadow: 0 4px 10px rgba(3, 199, 90, 0.2);
         }
 
+        /* 직관적인 직접 입력 그룹핑 디자인 */
+        .custom-timer-wrapper {
+            display: flex;
+            align-items: center;
+            background-color: #F8F9FA;
+            padding: 6px 8px 6px 20px;
+            border-radius: 50px;
+            border: 1.5px solid #E3E5E8;
+            gap: 10px;
+        }
+        .custom-timer-label {
+            color: #767678;
+            font-weight: 800;
+            font-size: 1.1em;
+        }
+        .custom-timer-input {
+            width: 60px;
+            padding: 8px 12px;
+            border: 1px solid #E3E5E8;
+            border-radius: 8px;
+            font-size: 1.2em;
+            font-weight: 800;
+            text-align: center;
+            color: #1E1E23;
+            outline: none;
+            background-color: #FFFFFF;
+            transition: all 0.2s;
+        }
+        .custom-timer-input:focus {
+            border-color: #03C75A;
+            box-shadow: 0 0 0 2px rgba(3, 199, 90, 0.1);
+        }
+        /* 숫자 입력창 화살표 숨기기 */
+        .custom-timer-input::-webkit-outer-spin-button,
+        .custom-timer-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .custom-timer-input[type=number] {
+            -moz-appearance: textfield;
+        }
+
         /* -------------------------------------------
            문제 화면 헤더 (유형 뱃지 및 홈 버튼)
         ------------------------------------------- */
@@ -109,11 +153,10 @@
             padding: 0 20px;
         }
         
-        /* 세련된 네이버 스타일 뱃지형 유형 타이틀 */
         #current-type-title {
             display: inline-block;
-            background-color: #E8F9EE; /* 네이버 라이트 그린 */
-            color: #00A84D; /* 네이버 딥 그린 */
+            background-color: #E8F9EE;
+            color: #00A84D; 
             padding: 14px 35px;
             border-radius: 50px;
             font-size: 1.7em;
@@ -123,7 +166,6 @@
             letter-spacing: -0.5px;
         }
 
-        /* 문제 화면 내 메인으로 가는 버튼 */
         .btn-go-main {
             font-family: inherit;
             background-color: #F0F2F5;
@@ -154,9 +196,6 @@
             font-weight: 600;
         }
         
-        /* -------------------------------------------
-           타이머 UI 대폭 확대 (눈에 잘 띄게 변경)
-        ------------------------------------------- */
         #timer-container {
             background-color: #FFFFFF;
             padding: 15px 40px;
@@ -173,7 +212,7 @@
             margin-right: 20px;
         }
         #timer-text {
-            font-size: 3.5em; /* 기존 2em에서 크게 확대 */
+            font-size: 3.5em; 
             font-weight: 800; 
             color: #03C75A; 
             font-variant-numeric: tabular-nums;
@@ -297,39 +336,14 @@
             font-weight: 600;
         }
 
-        /* 혼합 유형 스페셜 카드 */
-        .btn-mix { background-color: #1E1E23; border-color: #1E1E23; }
-        .btn-mix .card-title, .btn-mix .card-desc { color: #FFFFFF; }
-        .btn-mix .card-desc { color: #A0A0A0; }
-        .btn-mix:hover {
-            background-color: #000000;
-            border-color: #03C75A;
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
-        }
-
         /* 기타 액션 버튼 */
-        #btn-answer { 
-            background-color: #03C75A; 
-            color: white; 
-            box-shadow: 0 4px 10px rgba(3, 199, 90, 0.2);
-        }
+        #btn-answer { background-color: #03C75A; color: white; box-shadow: 0 4px 10px rgba(3, 199, 90, 0.2); }
         #btn-answer:hover { background-color: #02b351; }
-        
         #btn-next { background-color: #1E1E23; color: white; }
         #btn-next:hover { background-color: #000000; }
-        
-        #btn-restart { 
-            background-color: #03C75A; 
-            color: white; 
-            box-shadow: 0 4px 10px rgba(3, 199, 90, 0.2);
-        }
+        #btn-restart { background-color: #03C75A; color: white; box-shadow: 0 4px 10px rgba(3, 199, 90, 0.2); }
         #btn-restart:hover { background-color: #02b351; }
-        
-        /* 처음으로 버튼 (배경과 분리되도록 라이트 그레이 적용) */
-        #btn-home { 
-            background-color: #F0F2F5; 
-            color: #1E1E23; 
-        }
+        #btn-home { background-color: #F0F2F5; color: #1E1E23; }
         #btn-home:hover { background-color: #E3E5E8; }
 
         /* 화면 전환 */
@@ -399,6 +413,13 @@
                 <button class="btn-timer" onclick="setTimer(10, this)">10초</button>
                 <button class="btn-timer" onclick="setTimer(20, this)">20초</button>
                 <button class="btn-timer" onclick="setTimer(30, this)">30초</button>
+                <!-- 변경된 직접 입력 그룹 UI -->
+                <div class="custom-timer-wrapper">
+                    <span class="custom-timer-label">직접 입력 :</span>
+                    <input type="number" id="custom-timer-input" class="custom-timer-input" placeholder="0" min="1">
+                    <span style="font-weight: 800; color: #1E1E23; font-size: 1.1em;">초</span>
+                    <button class="btn-timer" id="btn-custom-apply" onclick="applyCustomTimer()" style="padding: 10px 20px; font-size: 1.1em; margin: 0; border: none; background-color: #E8F9EE; color: #00A84D;">적용</button>
+                </div>
             </div>
         </div>
         
@@ -415,7 +436,8 @@
                     <span class="card-title">대분수 + 대분수</span>
                     <span class="card-desc">자연수와 분수의 덧셈</span>
                 </button>
-                <button class="btn-type btn-mix" onclick="startRound('mix_add')">
+                <!-- 검은 배경 제거됨 -->
+                <button class="btn-type" onclick="startRound('mix_add')">
                     <span class="tag tag-mix">혼합</span>
                     <span class="card-title">덧셈 유형 섞어서</span>
                     <span class="card-desc">랜덤 덧셈 문제 풀이</span>
@@ -451,7 +473,8 @@
                     <span class="card-title">대분수 - 대분수</span>
                     <span class="card-desc">받아내림이 있는 뺄셈</span>
                 </button>
-                <button class="btn-type btn-mix" onclick="startRound('mix_sub')">
+                <!-- 검은 배경 제거됨 -->
+                <button class="btn-type" onclick="startRound('mix_sub')">
                     <span class="tag tag-mix">혼합</span>
                     <span class="card-title">뺄셈 유형 섞어서</span>
                     <span class="card-desc">랜덤 뺄셈 문제 풀이</span>
@@ -470,7 +493,7 @@
         
         <div id="progress-wrapper">
             <div id="progress">문제 1 / 10</div>
-            <!-- 타이머 UI (크기 대폭 확대) -->
+            <!-- 타이머 UI -->
             <div id="timer-container" style="display: none;">
                 <span class="timer-label">남은 시간</span>
                 <span id="timer-text">20</span>
@@ -522,12 +545,31 @@
         'mix_sub': "뺄셈 유형 혼합"
     };
 
-    // 타이머 설정 함수
+    // 프리셋 버튼을 통한 타이머 설정 함수
     function setTimer(seconds, element) {
         timerSetting = seconds;
         const buttons = document.querySelectorAll('.btn-timer');
         buttons.forEach(btn => btn.classList.remove('active'));
         element.classList.add('active');
+        
+        // 직접 입력 적용 버튼이 아닌 다른 버튼을 눌렀을 때 입력창 비우기
+        if (element.id !== 'btn-custom-apply') {
+            document.getElementById('custom-timer-input').value = '';
+        }
+    }
+
+    // 직접 입력 적용 버튼 클릭 시 실행
+    function applyCustomTimer() {
+        const inputVal = document.getElementById('custom-timer-input').value;
+        const parsed = parseInt(inputVal, 10);
+        
+        if (!isNaN(parsed) && parsed > 0) {
+            const customBtn = document.getElementById('btn-custom-apply');
+            setTimer(parsed, customBtn);
+        } else {
+            alert("올바른 초를 입력해주세요 (1 이상 숫자).");
+            document.getElementById('custom-timer-input').focus();
+        }
     }
 
     // 타이머 화면 업데이트 함수
