@@ -248,13 +248,11 @@
             <h2 style="font-size: 1.8em; color: #1E1E23; margin-bottom: 10px; margin-top:0;">🏆 전국 학급 랭킹전</h2>
             <p style="color: #767678; margin-bottom: 30px;">우리 학교와 반을 선택하고 점수를 올려보세요!</p>
 
-            <!-- 수정됨: 자동완성 결과창의 크기 변동 문제를 position: relative로 감싸 해결 -->
             <div style="position: relative; width: 100%; margin-bottom: 10px; box-sizing: border-box;">
                 <div style="display:flex; gap:10px; width: 100%; box-sizing: border-box;">
                     <input type="text" id="school-search-input" placeholder="초등학교 이름 검색 (예: 해빛)" style="flex:1; padding:15px; border-radius:12px; border:2px solid #E3E5E8; font-size:1.3em; box-sizing:border-box; outline:none; min-width:0;" onkeyup="searchSchool(this.value)">
                     <button onclick="searchSchool(document.getElementById('school-search-input').value)" style="background:#1E1E23; color:white; border:none; padding:0 20px; font-size:1.1em; font-weight:800; border-radius:12px; cursor:pointer; white-space:nowrap;">검색</button>
                 </div>
-                <!-- 수정됨: position: absolute를 주어 아래 요소들을 밀어내지 않게 설정 -->
                 <ul id="school-search-results" style="list-style:none; padding:0; margin:0; max-height:180px; overflow-y:auto; text-align:left; border-radius:12px; border:1px solid #E3E5E8; display:none; background:#fff; position: absolute; top: 100%; left: 0; width: 100%; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: 5px;"></ul>
             </div>
 
@@ -368,7 +366,6 @@
     <!-- 결과 요약 및 리더보드 화면 -->
     <div id="summary-screen">
         <h2 id="summary-main-title">이번 회차 정답 확인</h2>
-        <!-- 연습모드용 오답노트 영역 -->
         <div id="summary-list"></div>
         
         <div class="buttons">
@@ -392,20 +389,43 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // --- 2. 학교 검색용 정적 데이터 연동 ---
+    // --- 2. 주간 식별자(Week ID) 계산 기능 (KST 기준 매주 월요일 0시 리셋) ---
+    function getWeekIds() {
+        const now = new Date();
+        const utcMs = now.getTime();
+        const kstMs = utcMs + (9 * 60 * 60 * 1000); // UTC에서 9시간 더해 한국시간(KST)으로 변환
+        const kstDate = new Date(kstMs);
+        
+        let day = kstDate.getUTCDay(); // 0(일요일) ~ 6(토요일)
+        let daysToMonday = day === 0 ? 6 : day - 1; // 월요일 기준 몇 일 지났는지
+        
+        const mondayMs = kstMs - (daysToMonday * 24 * 60 * 60 * 1000);
+        const prevMondayMs = mondayMs - (7 * 24 * 60 * 60 * 1000);
+        
+        const formatMs = (ms) => {
+            const d = new Date(ms);
+            let yyyy = d.getUTCFullYear();
+            let mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+            let dd = String(d.getUTCDate()).padStart(2, '0');
+            return `${yyyy}${mm}${dd}`; // 예: 20260907
+        };
+        
+        return { current: formatMs(mondayMs), prev: formatMs(prevMondayMs) };
+    }
+
+    // --- 3. 학교 검색용 정적 데이터 연동 ---
     let schoolList = [];
     let currentSchoolName = "";
     let currentClassId = "";
 
     window.onload = () => {
-        fetch('elemetaryschooldata.json')
+        fetch('elementaryschooldata.json')
             .then(res => res.ok ? res.json() : Promise.reject())
             .catch(() => fetch('elementaryschooldata.json').then(res => res.json()))
             .then(data => { schoolList = data; })
             .catch(err => console.log("학교 데이터를 불러오지 못했습니다.", err));
     };
 
-    // --- 학교명 검색 함수 ---
     function searchSchool(query) {
         const resultsBox = document.getElementById('school-search-results');
         
@@ -450,7 +470,7 @@
         document.getElementById('school-search-results').style.display = 'none';
     }
 
-    // --- 3. 게임 핵심 변수 ---
+    // --- 4. 게임 핵심 변수 ---
     let problems = [];
     let currentIndex = 0;
     const totalQuestions = 10;
@@ -550,7 +570,7 @@
         document.getElementById('floating-banner').style.display = 'none';
         document.getElementById('floating-ranking-board').style.display = 'none';
         document.getElementById('summary-screen').style.display = 'block';
-        document.getElementById('summary-main-title').innerText = "🏆 전국 학급 실시간 랭킹";
+        document.getElementById('summary-main-title').innerText = "🏆 전국 학급 랭킹 현황";
         document.getElementById('summary-list').innerHTML = `<h3 style="grid-column: 1 / -1; text-align:center; padding: 40px;">랭킹 데이터를 불러오는 중입니다... 🔄</h3>`;
         document.getElementById('btn-restart').style.display = 'none'; 
         loadLeaderboard(true);
@@ -722,14 +742,18 @@
         setTimeout(() => effect.remove(), 1000);
     }
 
+    // --- 5. Firebase 주간 기록 저장 및 불러오기 ---
     function finishRankingMode() {
         clearInterval(timerInterval);
         document.getElementById('problem-screen').style.display = 'none';
         document.getElementById('summary-screen').style.display = 'block';
-        document.getElementById('summary-main-title').innerText = "🏆 명예의 전당";
+        document.getElementById('summary-main-title').innerText = "🏆 전국 학급 랭킹 현황";
         document.getElementById('summary-list').innerHTML = `<h3 style="grid-column: 1 / -1; text-align:center; padding: 40px;">서버에 점수를 기록 중입니다... 🔄</h3>`;
 
-        const classRef = db.collection('classRankings').doc(currentClassId);
+        const weeks = getWeekIds();
+        const currentColl = 'classRankings_' + weeks.current; // 이번 주 컬렉션에 저장
+        const classRef = db.collection(currentColl).doc(currentClassId);
+
         classRef.set({
             score: firebase.firestore.FieldValue.increment(rankingScore),
             playCount: firebase.firestore.FieldValue.increment(1),
@@ -745,41 +769,62 @@
     }
 
     function loadLeaderboard(isViewOnly = false) {
-        db.collection('classRankings').orderBy('score', 'desc').limit(10).get()
-        .then(snap => {
-            let html = `<div style="grid-column: 1 / -1; background:#fff; border-radius:16px; padding:30px; border:2px solid #E8F9EE;">`;
-            if (!isViewOnly) {
-                html += `<h3 style="color:#03C75A; margin-bottom:30px; text-align:center; font-size:2em;">🎉 방금 획득한 점수: +${rankingScore.toLocaleString()}점</h3>`;
-            } else {
-                html += `<h3 style="color:#03C75A; margin-bottom:30px; text-align:center; font-size:2em;">🏆 전국 TOP 10 명예의 전당</h3>`;
-            }
-            html += '<ul style="list-style:none; padding:0; margin:0;">';
+        const weeks = getWeekIds();
+        const currentColl = 'classRankings_' + weeks.current;
+        const prevColl = 'classRankings_' + weeks.prev;
 
-            let rank = 1;
-            snap.forEach(doc => {
-                let d = doc.data();
-                let isMyClass = (!isViewOnly && doc.id === currentClassId);
-                let bg = isMyClass ? '#E8F9EE' : '#F8F9FA';
-                let border = isMyClass ? '2px solid #03C75A' : '1px solid #E3E5E8';
-                
-                html += `<li style="display:flex; justify-content:space-between; align-items:center; padding: 20px; background:${bg}; margin-bottom:10px; border-radius:12px; border:${border};">
-                    <div style="display:flex; align-items:center; gap:25px;">
-                        <strong style="color:#1E1E23; font-size:1.6em;">${rank}위</strong>
-                        <span style="font-size:1.3em;">${d.schoolName} ${d.grade}학년 ${d.classNum}반</span>
-                    </div>
-                    <strong style="color:#03C75A; font-size:1.6em;">${d.score.toLocaleString()}점</strong>
-                </li>`;
-                rank++;
-            });
-            if (snap.empty) {
-                html += `<li style="text-align:center; padding:20px; font-size:1.2em; color:#767678;">아직 등록된 랭킹이 없습니다. 첫 번째로 도전해보세요!</li>`;
+        Promise.all([
+            db.collection(currentColl).orderBy('score', 'desc').limit(10).get(),
+            db.collection(prevColl).orderBy('score', 'desc').limit(10).get()
+        ]).then(([currentSnap, prevSnap]) => {
+            let html = `<div style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:40px;">`;
+            
+            // 이번 주 랭킹 블록
+            html += `<div style="background:#fff; border-radius:16px; padding:30px; border:2px solid #E8F9EE;">`;
+            if (!isViewOnly) {
+                html += `<h3 style="color:#03C75A; margin-bottom:20px; text-align:center; font-size:2em;">🎉 방금 획득한 점수: +${rankingScore.toLocaleString()}점</h3>`;
             }
-            html += '</ul></div>';
+            html += `<h3 style="color:#1E1E23; margin-bottom:20px; text-align:center; font-size:1.8em;">🔥 이번 주 실시간 랭킹</h3>`;
+            html += renderList(currentSnap, isViewOnly, currentClassId);
+            html += `</div>`;
+
+            // 지난 주 랭킹 블록
+            html += `<div style="background:#fff; border-radius:16px; padding:30px; border:1px solid #E3E5E8;">`;
+            html += `<h3 style="color:#767678; margin-bottom:20px; text-align:center; font-size:1.5em;">🏅 지난 주 최종 명예의 전당</h3>`;
+            html += renderList(prevSnap, true, null); // 지난 주 랭킹은 항상 보기 전용
+            html += `</div>`;
+            
+            html += `</div>`;
             document.getElementById('summary-list').innerHTML = html;
-        })
-        .catch(err => {
+        }).catch(err => {
             document.getElementById('summary-list').innerHTML = `<h3 style="grid-column: 1 / -1; text-align:center; color:#FF5252;">데이터를 불러오지 못했습니다. 인터넷 연결을 확인하세요.</h3>`;
+            console.error(err);
         });
+    }
+
+    function renderList(snap, isViewOnly, highlightId) {
+        let html = '<ul style="list-style:none; padding:0; margin:0;">';
+        let rank = 1;
+        snap.forEach(doc => {
+            let d = doc.data();
+            let isMyClass = (!isViewOnly && doc.id === highlightId);
+            let bg = isMyClass ? '#E8F9EE' : '#F8F9FA';
+            let border = isMyClass ? '2px solid #03C75A' : '1px solid #E3E5E8';
+            
+            html += `<li style="display:flex; justify-content:space-between; align-items:center; padding: 20px; background:${bg}; margin-bottom:10px; border-radius:12px; border:${border};">
+                <div style="display:flex; align-items:center; gap:25px;">
+                    <strong style="color:#1E1E23; font-size:1.6em;">${rank}위</strong>
+                    <span style="font-size:1.3em;">${d.schoolName} ${d.grade}학년 ${d.classNum}반</span>
+                </div>
+                <strong style="color:#03C75A; font-size:1.6em;">${d.score.toLocaleString()}점</strong>
+            </li>`;
+            rank++;
+        });
+        if (snap.empty) {
+            html += `<li style="text-align:center; padding:20px; font-size:1.2em; color:#767678;">아직 등록된 랭킹이 없습니다. 1위에 도전해보세요!</li>`;
+        }
+        html += '</ul>';
+        return html;
     }
 
     function showSummary() {
