@@ -393,11 +393,11 @@
     function getWeekIds() {
         const now = new Date();
         const utcMs = now.getTime();
-        const kstMs = utcMs + (9 * 60 * 60 * 1000); // UTC에서 9시간 더해 한국시간(KST)으로 변환
+        const kstMs = utcMs + (9 * 60 * 60 * 1000); 
         const kstDate = new Date(kstMs);
         
-        let day = kstDate.getUTCDay(); // 0(일요일) ~ 6(토요일)
-        let daysToMonday = day === 0 ? 6 : day - 1; // 월요일 기준 몇 일 지났는지
+        let day = kstDate.getUTCDay(); 
+        let daysToMonday = day === 0 ? 6 : day - 1; 
         
         const mondayMs = kstMs - (daysToMonday * 24 * 60 * 60 * 1000);
         const prevMondayMs = mondayMs - (7 * 24 * 60 * 60 * 1000);
@@ -407,7 +407,7 @@
             let yyyy = d.getUTCFullYear();
             let mm = String(d.getUTCMonth() + 1).padStart(2, '0');
             let dd = String(d.getUTCDate()).padStart(2, '0');
-            return `${yyyy}${mm}${dd}`; // 예: 20260907
+            return `${yyyy}${mm}${dd}`; 
         };
         
         return { current: formatMs(mondayMs), prev: formatMs(prevMondayMs) };
@@ -419,7 +419,7 @@
     let currentClassId = "";
 
     window.onload = () => {
-        fetch('elementaryschooldata.json')
+        fetch('elemetaryschooldata.json')
             .then(res => res.ok ? res.json() : Promise.reject())
             .catch(() => fetch('elementaryschooldata.json').then(res => res.json()))
             .then(data => { schoolList = data; })
@@ -564,7 +564,6 @@
         generateRound('ranking_mix');
     }
     
-    // --- 실시간 랭킹 차트 보기 전용 모드 ---
     function showLeaderboardOnly() {
         document.getElementById('type-screen').style.display = 'none';
         document.getElementById('floating-banner').style.display = 'none';
@@ -692,8 +691,24 @@
         let p = problems[currentIndex];
         let isCorrect = false;
 
-        if (w === p.ansWhole && n === p.ansNum) {
-            if (n === 0 || d === p.den) isCorrect = true;
+        // 수정됨: 정답의 가분수 분자 값 계산 (자동 동치 판별)
+        let expectedNum = p.ansWhole * p.den + p.ansNum;
+        
+        // 수정됨: 학생 입력값의 가분수 분자와 분모 계산
+        let studentNum = 0;
+        let studentDen = 1;
+        
+        if (n === 0) {
+            studentNum = w;
+            studentDen = 1;
+        } else if (d > 0) {
+            studentNum = w * d + n;
+            studentDen = d;
+        }
+
+        // 수정됨: 크기 비교 (교차 곱셈을 통해 동치 분수 모두 정답 인정)
+        if (studentNum * p.den === expectedNum * studentDen) {
+            isCorrect = true;
         }
 
         if(isCorrect) {
@@ -742,7 +757,6 @@
         setTimeout(() => effect.remove(), 1000);
     }
 
-    // --- 5. Firebase 주간 기록 저장 및 불러오기 ---
     function finishRankingMode() {
         clearInterval(timerInterval);
         document.getElementById('problem-screen').style.display = 'none';
@@ -751,7 +765,7 @@
         document.getElementById('summary-list').innerHTML = `<h3 style="grid-column: 1 / -1; text-align:center; padding: 40px;">서버에 점수를 기록 중입니다... 🔄</h3>`;
 
         const weeks = getWeekIds();
-        const currentColl = 'classRankings_' + weeks.current; // 이번 주 컬렉션에 저장
+        const currentColl = 'classRankings_' + weeks.current; 
         const classRef = db.collection(currentColl).doc(currentClassId);
 
         classRef.set({
@@ -777,10 +791,10 @@
             db.collection(currentColl).orderBy('score', 'desc').limit(10).get(),
             db.collection(prevColl).orderBy('score', 'desc').limit(10).get()
         ]).then(([currentSnap, prevSnap]) => {
-            let html = `<div style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:40px;">`;
+            let html = `<div style="grid-column: 1 / -1; display:flex; flex-wrap:wrap; gap:40px; align-items:flex-start;">`;
             
-            // 이번 주 랭킹 블록
-            html += `<div style="background:#fff; border-radius:16px; padding:30px; border:2px solid #E8F9EE;">`;
+            // 이번 주 랭킹 블록 (좌측)
+            html += `<div style="flex:1; min-width:350px; background:#fff; border-radius:16px; padding:30px; border:2px solid #E8F9EE; box-sizing:border-box;">`;
             if (!isViewOnly) {
                 html += `<h3 style="color:#03C75A; margin-bottom:20px; text-align:center; font-size:2em;">🎉 방금 획득한 점수: +${rankingScore.toLocaleString()}점</h3>`;
             }
@@ -788,10 +802,10 @@
             html += renderList(currentSnap, isViewOnly, currentClassId);
             html += `</div>`;
 
-            // 지난 주 랭킹 블록
-            html += `<div style="background:#fff; border-radius:16px; padding:30px; border:1px solid #E3E5E8;">`;
+            // 지난 주 랭킹 블록 (우측)
+            html += `<div style="flex:1; min-width:350px; background:#fff; border-radius:16px; padding:30px; border:1px solid #E3E5E8; box-sizing:border-box;">`;
             html += `<h3 style="color:#767678; margin-bottom:20px; text-align:center; font-size:1.5em;">🏅 지난 주 최종 명예의 전당</h3>`;
-            html += renderList(prevSnap, true, null); // 지난 주 랭킹은 항상 보기 전용
+            html += renderList(prevSnap, true, null); 
             html += `</div>`;
             
             html += `</div>`;
