@@ -793,17 +793,17 @@
             let html = `<div style="grid-column: 1 / -1; display:flex; flex-wrap:wrap; gap:40px; align-items:flex-start;">`;
             
             // 이번 주 랭킹 블록 (좌측)
-            html += `<div style="flex:1; min-width:350px; background:#fff; border-radius:16px; padding:30px; border:2px solid #E8F9EE; box-sizing:border-box;">`;
+            html += `<div style="flex:2; min-width:350px; background:#fff; border-radius:16px; padding:30px; border:2px solid #E8F9EE; box-sizing:border-box; font-size:1rem;">`;
             if (!isViewOnly) {
-                html += `<h3 style="color:#03C75A; margin-bottom:20px; text-align:center; font-size:2em;">🎉 방금 획득한 점수: +${rankingScore.toLocaleString()}점</h3>`;
+                html += `<h3 style="color:#03C75A; margin-bottom:20px; text-align:center; font-size:1.4em;">🎉 방금 획득한 점수: +${rankingScore.toLocaleString()}</h3>`;
             }
-            html += `<h3 style="color:#1E1E23; margin-bottom:20px; text-align:center; font-size:1.8em;">🔥 이번 주 실시간 랭킹</h3>`;
+            html += `<h3 style="color:#1E1E23; margin-bottom:20px; text-align:center; font-size:1.4em;">🔥 이번 주 실시간 랭킹</h3>`;
             html += renderList(currentSnap, isViewOnly, currentClassId);
             html += `</div>`;
 
             // 지난 주 랭킹 블록 (우측)
-            html += `<div style="flex:1; min-width:350px; background:#fff; border-radius:16px; padding:30px; border:1px solid #E3E5E8; box-sizing:border-box;">`;
-            html += `<h3 style="color:#767678; margin-bottom:20px; text-align:center; font-size:1.5em;">🏅 지난 주 최종 명예의 전당</h3>`;
+            html += `<div style="flex:1; min-width:280px; background:#fff; border-radius:16px; padding:30px; border:1px solid #E3E5E8; box-sizing:border-box; font-size:1rem;">`;
+            html += `<h3 style="color:#767678; margin-bottom:20px; text-align:center; font-size:1.2em;">🏅 지난 주 최종 명예의 전당</h3>`;
             html += renderList(prevSnap, true, null); 
             html += `</div>`;
             
@@ -824,12 +824,12 @@
             let bg = isMyClass ? '#E8F9EE' : '#F8F9FA';
             let border = isMyClass ? '2px solid #03C75A' : '1px solid #E3E5E8';
             
-            html += `<li style="display:flex; justify-content:space-between; align-items:center; padding: 20px; background:${bg}; margin-bottom:10px; border-radius:12px; border:${border};">
-                <div style="display:flex; align-items:center; gap:25px;">
-                    <strong style="color:#1E1E23; font-size:1.6em;">${rank}위</strong>
-                    <span style="font-size:1.3em;">${d.schoolName} ${d.grade}학년 ${d.classNum}반</span>
+            html += `<li style="display:grid; grid-template-columns:3em minmax(0, 1fr) minmax(5ch, max-content); column-gap:16px; align-items:center; padding: 20px; background:${bg}; margin-bottom:10px; border-radius:12px; border:${border};">
+                <div style="display:contents;">
+                    <strong style="color:#1E1E23; font-size:1.1em;">${rank}위</strong>
+                    <span style="font-size:1.05em; overflow-wrap:anywhere;">${d.schoolName} ${d.grade}학년 ${d.classNum}반</span>
                 </div>
-                <strong style="color:#03C75A; font-size:1.6em;">${d.score.toLocaleString()}점</strong>
+                <strong style="color:#03C75A; font-size:1.1em; text-align:right; white-space:nowrap;">${d.score.toLocaleString()}</strong>
             </li>`;
             rank++;
         });
