@@ -97,7 +97,7 @@
         .custom-timer-input:focus { border-color: #03C75A; box-shadow: 0 0 0 2px rgba(3, 199, 90, 0.1); }
         .custom-timer-input::-webkit-outer-spin-button,
         .custom-timer-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        .custom-timer-input[type=number] { -moz-appearance: textfield; }
+      .custom-timer-input[type=number] {-moz-appearance: textfield; appearance: textfield;}
 
         /* 문제 화면 헤더 */
         #problem-header {
@@ -419,9 +419,8 @@
     let currentClassId = "";
 
     window.onload = () => {
-        fetch('elemetaryschooldata.json')
+        fetch('elementaryschooldata.json')
             .then(res => res.ok ? res.json() : Promise.reject())
-            .catch(() => fetch('elementaryschooldata.json').then(res => res.json()))
             .then(data => { schoolList = data; })
             .catch(err => console.log("학교 데이터를 불러오지 못했습니다.", err));
     };
