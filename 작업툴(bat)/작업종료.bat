@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 > nul
 
-cd /d "C:\Users\USER\Desktop\codingroom\bunsutrainer"
+cd /d "%~dp0.."
 
 if errorlevel 1 (
     echo 프로젝트 폴더로 이동하지 못했습니다.
@@ -39,6 +39,7 @@ if "%msg%"=="" (
 
 echo.
 echo 변경사항 저장 중...
+
 git add .
 
 git commit -m "%msg%"
@@ -52,6 +53,7 @@ if errorlevel 1 (
 
 echo.
 echo GitHub로 업로드 중...
+
 git push
 
 if errorlevel 1 (
@@ -65,4 +67,5 @@ echo.
 echo ==============================
 echo GitHub 저장 완료!
 echo ==============================
+
 pause
