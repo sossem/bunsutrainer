@@ -1,0 +1,10 @@
+tests/artifacts/
+tests/.browser-profile/
+tests/.browser-profile*/
+tests/__pycache__/
+node_modules/
+*.log
+# Local work-state snapshots; preserve on disk, exclude from commits.
+/codex-state.txt
+/git-diff.txt
+/git-status.txt

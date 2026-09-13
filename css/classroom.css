@@ -1,0 +1,929 @@
+/* A classroom is a presentation surface: every state fits the viewport. */
+body.classroom-mode {
+  --board-ink: #183c36;
+  --board-teal: #226f60;
+  --board-paper: #f7f8f5;
+  --board-problem-size: clamp(64px, min(7.4vw, 14vh), 304px);
+  --board-revealed-size: clamp(46px, min(5.55vw, 10.4vh), 230px);
+  --board-solution-size: clamp(32px, min(4vw, 7.6vh), 166px);
+  margin: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--board-paper);
+  color: var(--board-ink);
+}
+
+.classroom-mode #app {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.classroom-shell,
+.classroom-shell * {
+  box-sizing: border-box;
+}
+
+.classroom-shell {
+  display: grid;
+  grid-template-rows: clamp(58px, 7.8vh, 174px) minmax(0, 1fr) clamp(76px, 10vh, 220px) clamp(44px, 5.8vh, 126px);
+  gap: clamp(6px, 0.8vh, 18px);
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  padding: clamp(10px, 1.3vh, 30px) clamp(16px, 2.5vw, 100px);
+  background: var(--board-paper);
+}
+
+.classroom-header {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 1.5vw, 60px);
+  min-width: 0;
+  border-bottom: 1px solid #dce4de;
+}
+
+.classroom-header > button,
+.classroom-header .icon-text {
+  flex-shrink: 0;
+  min-height: clamp(44px, 4.8vh, 108px);
+  padding: 0.35em 0.7em;
+  font-size: clamp(17px, 1.25vw, 48px);
+}
+
+.classroom-context {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65em;
+  min-width: 0;
+  font-size: clamp(20px, 1.55vw, 60px);
+  line-height: 1.25;
+}
+
+.classroom-context .eyebrow {
+  flex-shrink: 0;
+  color: #49665c;
+  font-size: 0.8em;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.classroom-context strong {
+  font-size: inherit;
+  font-weight: 750;
+  text-wrap: balance;
+}
+
+.classroom-counter {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: clamp(20px, 1.6vw, 64px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.classroom-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(20px, 3.2vh, 72px);
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(10px, 1.5vh, 32px) 0;
+  text-align: center;
+}
+
+.classroom-stage .problem-prompt {
+  flex: 0 0 auto;
+  max-width: 95%;
+  margin: 0;
+  font-size: clamp(26px, min(2.3vw, 4.4vh), 92px);
+  font-weight: 650;
+  line-height: 1.35;
+  word-break: keep-all;
+  text-wrap: balance;
+}
+
+.classroom-stage .math-line {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  color: inherit;
+  font-weight: 750;
+  line-height: 1;
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+
+.classroom-stage .problem-equation {
+  flex: 0 0 auto;
+  width: 100%;
+  font-size: var(--board-problem-size);
+}
+
+.classroom-stage .fraction {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  min-width: 0.92em;
+  margin: 0;
+  vertical-align: middle;
+  text-align: center;
+  font-size: 1em;
+  line-height: 1.05;
+}
+
+.classroom-stage .fraction .numerator,
+.classroom-stage .fraction .denominator {
+  display: block;
+  min-width: 0.92em;
+  padding: 0.10em 0.12em;
+  font-size: 1em;
+  line-height: 1.05;
+}
+
+.classroom-stage .fraction .numerator {
+  border-bottom: max(3px, 0.038em) solid currentColor;
+}
+
+.classroom-stage .fraction .denominator {
+  border-top: 0;
+}
+
+.classroom-stage .mixed-number {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.13em;
+  font-size: 1em;
+}
+
+.classroom-stage .mixed-number .whole {
+  font-size: 1em;
+  font-weight: inherit;
+}
+
+.classroom-stage .math-operator {
+  display: inline-block;
+  flex: 0 0 auto;
+  font-size: 0.75em;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.classroom-stage .math-blank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0.87em;
+  min-height: 0.87em;
+  border: max(2px, 0.025em) solid #65877a;
+  border-radius: 0.10em;
+  color: var(--board-teal);
+  font-size: 0.82em;
+}
+
+.classroom-stage.has-reveal {
+  gap: clamp(8px, 1.2vh, 28px);
+  padding-top: clamp(6px, 0.8vh, 18px);
+  padding-bottom: clamp(6px, 0.8vh, 18px);
+}
+
+.classroom-stage.has-reveal .problem-prompt {
+  font-size: clamp(23px, min(1.85vw, 3.6vh), 76px);
+}
+
+.classroom-stage.has-reveal .problem-equation {
+  font-size: var(--board-revealed-size);
+}
+
+.classroom-stage .reveal-panel {
+  flex: 0 1 auto;
+  width: min(100%, 88vw);
+  min-width: 0;
+  margin: 0;
+  padding: clamp(12px, 1.6vh, 34px) clamp(20px, 2vw, 78px);
+  border: 1px solid #d9e6dc;
+  border-radius: clamp(14px, 1.2vw, 48px);
+  background: #fff;
+}
+
+.classroom-stage .reveal-label {
+  color: var(--board-teal);
+  font-size: clamp(26px, min(2.1vw, 4vh), 84px);
+  font-weight: 800;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.classroom-stage .hint-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8em;
+  padding-top: clamp(20px, 3vh, 64px);
+  padding-bottom: clamp(20px, 3vh, 64px);
+  border-color: #dfd5a6;
+  background: #fff8de;
+  font-size: clamp(28px, min(2.2vw, 4.4vh), 88px);
+  font-weight: 650;
+  line-height: 1.45;
+  word-break: keep-all;
+  text-wrap: balance;
+}
+
+.classroom-stage .hint-panel p {
+  margin: 0;
+}
+
+.classroom-stage .hint-panel .step-text {
+  color: #68541d;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.classroom-stage .hint-panel .reveal-label {
+  color: #775c13;
+}
+
+.classroom-stage .answer-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(30px, 4vw, 160px);
+  background: #edf6ee;
+  color: #175344;
+}
+
+.classroom-stage .answer-equation {
+  font-size: clamp(48px, min(5.8vw, 10.8vh), 238px);
+}
+
+.classroom-stage .solution-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: clamp(6px, 0.7vh, 18px);
+}
+
+.classroom-stage .step-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+  min-width: 0;
+  color: var(--board-teal);
+  font-size: clamp(24px, min(1.85vw, 3.6vh), 76px);
+  font-weight: 750;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.classroom-stage .step-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  flex-shrink: 0;
+}
+
+.classroom-stage .step-heading h2 {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.classroom-stage .step-nav button {
+  min-height: clamp(42px, 4.6vh, 102px);
+  padding: 0.35em 0.65em;
+  border-radius: 0.5em;
+  font-size: clamp(18px, 1.3vw, 50px);
+  white-space: nowrap;
+}
+
+.classroom-stage .step-text {
+  margin: 0;
+  color: #385c4f;
+  font-size: clamp(23px, min(1.7vw, 3.2vh), 70px);
+  font-weight: 600;
+  line-height: 1.35;
+  word-break: keep-all;
+  text-wrap: balance;
+}
+
+.classroom-stage .step-equation {
+  font-size: var(--board-solution-size);
+}
+
+.teacher-controls {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: stretch;
+  gap: clamp(8px, 0.8vw, 32px);
+  min-height: 0;
+}
+
+.teacher-controls .btn,
+.teacher-controls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0.45em 0.4em;
+  border-radius: clamp(12px, 1vw, 40px);
+  font-size: clamp(23px, min(1.6vw, 3.4vh), 66px);
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.teacher-controls button[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 max(2px, 0.16vw) var(--board-teal);
+  background: #e4f0e7;
+  color: #194d3e;
+}
+
+.classroom-shell button:disabled {
+  color: #687b71;
+  border-color: #d9e0da;
+  background: #edf0eb;
+  opacity: 1;
+  box-shadow: none;
+  cursor: default;
+}
+
+.classroom-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 1.7vw, 70px);
+  min-width: 0;
+  min-height: 0;
+}
+
+.classroom-toolbar button {
+  min-width: 0;
+  min-height: clamp(40px, 4.6vh, 100px);
+  padding: 0.35em 0.65em;
+  border-radius: 0.6em;
+  font-size: clamp(17px, 1.15vw, 46px);
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.teacher-controls .icon,
+.classroom-toolbar .icon {
+  width: 1em;
+  height: 1em;
+}
+
+.classroom-stage .visual-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: clamp(8px, 1.2vh, 26px);
+}
+
+.classroom-stage .visual-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: clamp(12px, 1.4vh, 32px);
+  min-width: 0;
+  font-size: clamp(25px, min(2vw, 3.8vh), 82px);
+}
+
+.classroom-stage .model-row {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  min-width: 0;
+}
+
+.classroom-stage .model-row > strong,
+.classroom-stage .model-label {
+  min-width: 3em;
+  font-size: inherit;
+  font-weight: 750;
+}
+
+.classroom-stage .fraction-bar {
+  display: grid;
+  grid-template-columns: repeat(var(--parts, 1), minmax(0, 1fr));
+  flex: 1;
+  width: 100%;
+  height: clamp(48px, 6.8vh, 150px);
+  min-width: 0;
+  border: max(2px, 0.1vw) solid var(--board-teal);
+  border-radius: 0.13em;
+  overflow: hidden;
+}
+
+.classroom-stage .bar-cell {
+  min-width: 0;
+  border-right: max(1px, 0.07vw) solid #698b7c;
+  background: #f7faf6;
+}
+
+.classroom-stage .bar-cell:last-child {
+  border-right: 0;
+}
+
+.classroom-stage .bar-cell.filled {
+  background: #3a8d70;
+}
+
+.classroom-stage .area-grid {
+  width: clamp(160px, 17vw, 660px);
+  max-width: 100%;
+  max-height: 22vh;
+  margin: 0 auto;
+  aspect-ratio: 1.5;
+  border: max(2px, 0.1vw) solid var(--board-teal);
+}
+
+.classroom-stage .visual-caption {
+  margin: 0;
+  font-size: clamp(24px, min(1.75vw, 3.4vh), 72px);
+  font-weight: 650;
+  line-height: 1.35;
+  word-break: keep-all;
+}
+
+/* The visual models share the reveal space, with labels beside diagrams. */
+.classroom-stage .visual-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 0.6vw, 24px);
+  margin: 0;
+}
+
+.classroom-stage .visual-tabs:empty {
+  display: none;
+}
+
+.classroom-stage .visual-tabs button {
+  min-height: clamp(40px, 4.6vh, 102px);
+  padding: 0.35em 0.7em;
+  border-radius: 0.45em;
+  font-size: clamp(18px, 1.2vw, 48px);
+}
+
+.classroom-stage .model-row > .math-line {
+  flex: 0 0 auto;
+  min-width: 2.5em;
+  font-size: clamp(28px, min(2.3vw, 4.2vh), 94px);
+}
+
+.classroom-stage .bar-cell.unit-start {
+  border-left: max(3px, 0.18vw) solid #183c36;
+}
+
+.classroom-stage .visual-caption {
+  font-size: clamp(20px, min(1.5vw, 2.8vh), 60px);
+  line-height: 1.35;
+}
+
+.classroom-stage .circle-models {
+  flex-wrap: nowrap;
+  gap: clamp(28px, 5vw, 190px);
+}
+
+.classroom-stage .circle-item {
+  flex-direction: row;
+  gap: clamp(12px, 1.4vw, 54px);
+}
+
+.classroom-stage .circle-item svg {
+  width: clamp(110px, min(12vw, 20.4vh), 460px);
+  height: clamp(110px, min(12vw, 20.4vh), 460px);
+  flex: 0 0 auto;
+}
+
+.classroom-stage .circle-item .math-line {
+  font-size: clamp(28px, min(2.6vw, 4.8vh), 104px);
+}
+
+.classroom-stage .area-model {
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: clamp(25px, 3vw, 120px);
+}
+
+.classroom-stage .area-model > svg {
+  width: clamp(147px, 27.2vh, 615px);
+  height: clamp(110px, 20.4vh, 460px);
+  max-width: 45%;
+  flex: 0 0 auto;
+}
+
+.classroom-stage .area-legend {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55em;
+  max-width: 55%;
+  color: #345841;
+  font-size: clamp(20px, min(1.5vw, 2.8vh), 60px);
+  line-height: 1.35;
+  text-align: left;
+}
+
+.classroom-stage .area-legend > span,
+.classroom-stage .area-legend > strong {
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+}
+
+.classroom-stage .legend-mark {
+  flex: 0 0 auto;
+  width: 0.9em;
+  height: 0.9em;
+  border-width: 2px;
+}
+
+.classroom-stage .number-line-svg {
+  width: 100%;
+  height: clamp(110px, 20.4vh, 460px);
+  max-height: none;
+}
+
+.classroom-stage .visual-panel:has(.visual-math) .visual-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(6px, 0.7vh, 16px) clamp(18px, 2.5vw, 100px);
+}
+
+.classroom-stage .visual-math {
+  grid-column: 1 / -1;
+  font-size: clamp(26px, min(2.5vw, 4.5vh), 100px);
+}
+
+.classroom-stage .visual-panel:has(.visual-math) .model-row {
+  gap: 0.4em;
+}
+
+.classroom-stage .visual-panel:has(.visual-math) .model-row > .math-line {
+  font-size: clamp(23px, min(1.8vw, 3.4vh), 74px);
+}
+
+.classroom-stage .visual-panel:has(.visual-math) .fraction-bar {
+  height: clamp(34px, 4.4vh, 100px);
+}
+
+.classroom-stage .visual-panel:has(.visual-math) .visual-caption {
+  grid-column: 1 / -1;
+  font-size: clamp(18px, min(1.45vw, 2.7vh), 60px);
+  line-height: 1.3;
+}
+
+.classroom-mode.fullscreen .classroom-settings,
+.classroom-mode:fullscreen .classroom-settings,
+:fullscreen .classroom-shell .classroom-settings {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .classroom-context {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.12em;
+    font-size: 20px;
+  }
+
+  .classroom-stage .reveal-panel {
+    width: 100%;
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .classroom-stage .step-heading {
+    font-size: 23px;
+  }
+
+  .classroom-stage .step-text {
+    font-size: 23px;
+  }
+
+  .classroom-stage .step-nav button {
+    font-size: 17px;
+  }
+
+  .teacher-controls .btn,
+  .teacher-controls button {
+    font-size: 22px;
+  }
+
+  .classroom-toolbar {
+    gap: 4px;
+  }
+
+  .classroom-toolbar button {
+    font-size: 17px;
+  }
+}
+
+@media (max-width: 700px) {
+  body.classroom-mode {
+    --board-problem-size: clamp(40px, min(10vw, 11vh), 70px);
+    --board-revealed-size: clamp(30px, min(8vw, 8vh), 56px);
+    --board-solution-size: clamp(22px, min(5.4vw, 5.5vh), 38px);
+  }
+
+  .classroom-shell {
+    grid-template-rows: 66px minmax(0, 1fr) 112px 80px;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .classroom-header {
+    gap: 8px;
+  }
+
+  .classroom-header > button,
+  .classroom-header .icon-text {
+    min-height: 42px;
+    padding: 0.35em;
+    font-size: 15px;
+  }
+
+  .classroom-context {
+    font-size: 17px;
+  }
+
+  .classroom-counter {
+    font-size: 17px;
+  }
+
+  .classroom-stage,
+  .classroom-stage.has-reveal {
+    gap: 10px;
+    padding: 4px 0;
+  }
+
+  .classroom-stage .problem-prompt,
+  .classroom-stage.has-reveal .problem-prompt {
+    font-size: 21px;
+  }
+
+  .classroom-stage .math-line {
+    gap: 0.23em;
+  }
+
+  .classroom-stage .reveal-panel {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .classroom-stage .hint-panel {
+    flex-direction: column;
+    gap: 8px;
+    font-size: 21px;
+  }
+
+  .classroom-stage .reveal-label {
+    font-size: 22px;
+  }
+
+  .classroom-stage .answer-panel {
+    gap: 24px;
+  }
+
+  .classroom-stage .answer-equation {
+    font-size: clamp(36px, 9vw, 60px);
+  }
+
+  .classroom-stage .step-heading {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    font-size: 20px;
+    text-align: center;
+  }
+
+  .classroom-stage .step-nav {
+    gap: 6px;
+  }
+
+  .classroom-stage .step-nav button {
+    min-height: 36px;
+    font-size: 15px;
+  }
+
+  .classroom-stage .step-text {
+    font-size: 18px;
+  }
+
+  .teacher-controls {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .teacher-controls button {
+    grid-column: span 2;
+  }
+
+  .teacher-controls button:nth-last-child(-n + 2) {
+    grid-column: span 3;
+  }
+
+  .teacher-controls .btn,
+  .teacher-controls button {
+    font-size: 19px;
+    border-radius: 9px;
+  }
+
+  .classroom-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: center;
+    gap: 0 4px;
+  }
+
+  .classroom-toolbar button {
+    min-height: 38px;
+    padding: 0.3em 0.5em;
+    font-size: 15px;
+  }
+
+  .classroom-stage .visual-content,
+  .classroom-stage .visual-caption {
+    font-size: 19px;
+  }
+
+  .classroom-stage .fraction-bar {
+    height: 40px;
+  }
+
+  .classroom-stage .visual-tabs {
+    gap: 5px;
+  }
+
+  .classroom-stage .visual-tabs button {
+    min-height: 35px;
+    padding: 0.3em 0.5em;
+    font-size: 14px;
+  }
+
+  .classroom-stage .circle-models {
+    gap: 18px;
+  }
+
+  .classroom-stage .circle-item {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .classroom-stage .circle-item svg {
+    width: min(24vw, 13vh);
+    height: min(24vw, 13vh);
+  }
+
+  .classroom-stage .circle-item .math-line,
+  .classroom-stage .model-row > .math-line {
+    font-size: 23px;
+  }
+
+  .classroom-stage .area-model {
+    gap: 12px;
+  }
+
+  .classroom-stage .area-model > svg {
+    width: 38vw;
+    height: 28.5vw;
+    max-height: 18vh;
+  }
+
+  .classroom-stage .area-legend,
+  .classroom-stage .visual-caption,
+  .classroom-stage .visual-panel:has(.visual-math) .visual-caption {
+    font-size: 16px;
+  }
+
+  .classroom-stage .visual-panel:has(.visual-math) .visual-content {
+    gap: 6px 10px;
+  }
+
+  .classroom-stage .visual-panel:has(.visual-math) .model-row > .math-line {
+    font-size: 19px;
+    min-width: 2em;
+  }
+
+  .classroom-stage .visual-math {
+    font-size: 23px;
+  }
+
+  .classroom-stage .number-line-svg {
+    height: 100px;
+  }
+}
+
+@media (max-height: 600px) and (min-width: 701px) {
+  body.classroom-mode {
+    --board-problem-size: min(7.4vw, 14vh);
+    --board-revealed-size: min(5.55vw, 9vh);
+    --board-solution-size: min(4vw, 6.8vh);
+  }
+
+  .classroom-shell {
+    grid-template-rows: 44px minmax(0, 1fr) 52px 38px;
+    gap: 4px;
+    padding: 6px 16px;
+  }
+
+  .classroom-header > button,
+  .classroom-header .icon-text,
+  .classroom-toolbar button {
+    min-height: 34px;
+    font-size: 16px;
+  }
+
+  .classroom-context {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.5em;
+    font-size: 18px;
+  }
+
+  .classroom-counter {
+    font-size: 18px;
+  }
+
+  .classroom-stage,
+  .classroom-stage.has-reveal {
+    gap: 5px;
+    padding: 2px 0;
+  }
+
+  .classroom-stage .problem-prompt,
+  .classroom-stage.has-reveal .problem-prompt {
+    font-size: 21px;
+  }
+
+  .classroom-stage .reveal-panel {
+    padding: 8px 16px;
+  }
+
+  .classroom-stage .hint-panel {
+    font-size: 24px;
+  }
+
+  .classroom-stage .answer-equation {
+    font-size: min(5.8vw, 9vh);
+  }
+
+  .classroom-stage .step-heading,
+  .classroom-stage .reveal-label {
+    font-size: 22px;
+  }
+
+  .classroom-stage .step-text {
+    font-size: 20px;
+  }
+
+  .classroom-stage .step-nav button {
+    min-height: 32px;
+    font-size: 16px;
+  }
+
+  .teacher-controls .btn,
+  .teacher-controls button {
+    font-size: 21px;
+  }
+
+  .classroom-stage .fraction-bar {
+    height: 38px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .classroom-shell *,
+  .classroom-shell *::before,
+  .classroom-shell *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

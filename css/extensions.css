@@ -1,0 +1,43 @@
+/* Optional tools stay outside the existing classroom problem area. */
+.extension-settings .checkbox-label { margin-top: 14px; }
+.timer-custom { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; font-size: 13px; }
+.timer-custom input { width: 100px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.study-timer { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--green-soft); }
+.study-timer > span { display: flex; align-items: center; gap: 10px; }
+.study-timer small { font-size: 12px; }
+.study-timer strong { font-size: 27px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.study-timer .btn { min-height: 40px; padding: 6px 10px; white-space: nowrap; }
+.timer-expired { background: #fff4d5; border-color: #b89944; }
+.study-card > .study-timer { margin-bottom: 20px; }
+.session-growth, .record-growth { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 20px; padding: 12px; color: var(--green); background: var(--green-soft); border-radius: 12px; }
+.session-growth { margin: 16px 0; font-size: 14px; }
+.record-growth { margin: 14px 0; font-size: 13px; }
+.history-row .record-growth { justify-content: flex-start; }
+.growth-profile .stats-grid { margin-bottom: 32px; }
+.badge-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 28px; }
+.badge-list article { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+.badge-list article p { margin: 0; }
+.header-links { flex-wrap: wrap; }
+.classroom-header .study-timer { flex-shrink: 0; padding: 5px 10px; gap: 8px; }
+.classroom-header .study-timer small { display: none; }
+.classroom-header .study-timer strong { font-size: clamp(24px, 2.2vw, 84px); }
+.classroom-header .study-timer .btn { min-height: clamp(40px, 4.5vh, 98px); font-size: clamp(16px, 1.1vw, 42px); padding: 5px 9px; }
+@media (max-width: 1100px) {
+  .site-header .header-note { display: none; }
+  .classroom-header:has(.study-timer) { gap: 8px; }
+  .classroom-header .study-timer { gap: 5px; padding: 4px; }
+  .classroom-header .study-timer .btn { padding: 5px; font-size: 14px; }
+  .classroom-header:has(.study-timer) .classroom-context { font-size: 17px; }
+  .classroom-header:has(.study-timer) .classroom-counter { font-size: 17px; }
+}
+@media (max-width: 700px) {
+  .site-header { flex-wrap: wrap; gap: 14px; }
+  .header-links { gap: 4px; }
+  .header-links .btn { padding: 8px; font-size: 12px; }
+  .classroom-header:has(.study-timer) { flex-wrap: wrap; align-content: center; gap: 3px 8px; }
+  .classroom-header:has(.study-timer) .classroom-context { flex: 1; font-size: 14px; }
+  .classroom-header .study-timer { border: 0; padding: 0; background: transparent; order: 4; margin-left: auto; }
+  .classroom-header .study-timer strong { font-size: 20px; }
+  .classroom-header .study-timer .btn { min-height: 28px; font-size: 12px; padding: 3px 6px; }
+  .study-timer { flex-wrap: wrap; }
+}

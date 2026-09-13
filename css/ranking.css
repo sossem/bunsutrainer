@@ -1,0 +1,57 @@
+.ranking-page { padding: 44px 0 64px; }
+.ranking-page > h1 { margin: 12px 0; }
+.ranking-intro, .ranking-note { color: var(--muted); }
+.ranking-intro { margin-bottom: 28px; }
+.ranking-layout { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(0, 1.5fr); align-items: start; gap: 24px; }
+.ranking-registration, .ranking-board { min-width: 0; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: #fff; }
+.ranking-page h2 { margin-bottom: 20px; font-size: 24px; }
+.ranking-note { margin: 12px 0; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.ranking-current-class { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 24px; padding: 18px; border-radius: 14px; background: var(--green-soft); }
+.ranking-current-class > span:not(.pill) { color: var(--muted); font-size: 13px; }
+.ranking-current-class strong { overflow-wrap: anywhere; }
+.ranking-search { display: flex; gap: 8px; }
+.ranking-search input { min-width: 0; width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.ranking-search .btn { flex: 0 0 auto; padding-inline: 12px; }
+.ranking-error { color: #984025; overflow-wrap: anywhere; }
+.ranking-schools { display: grid; gap: 8px; max-height: 280px; overflow-y: auto; margin: 12px 0; padding: 5px; list-style: none; }
+.ranking-school { display: flex; align-items: flex-start; flex-direction: column; gap: 4px; width: 100%; text-align: left; }
+.ranking-school strong, .ranking-school small { overflow-wrap: anywhere; }
+.ranking-school small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.ranking-school.selected { border-color: var(--green); background: var(--green-soft); }
+.ranking-chosen { margin: 18px 0; font-size: 14px; }
+.ranking-class-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-top: 18px; }
+.ranking-class-fields label { flex: 1 1 80px; font-size: 13px; font-weight: 700; }
+.ranking-class-fields select { display: block; width: 100%; min-height: 48px; margin-top: 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 8px; color: var(--ink); }
+.ranking-class-fields > .btn { flex: 1 1 100%; }
+.ranking-tabs, .ranking-period { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ranking-tabs .btn { padding-inline: 15px; }
+.ranking-period { justify-content: space-between; margin-top: 20px; }
+.ranking-period > .btn { font-size: 13px; }
+.ranking-empty { padding: 34px 18px; text-align: center; border: 1px dashed var(--line); border-radius: 14px; }
+.ranking-empty h3 { font-size: 19px; }
+.ranking-empty p { margin-bottom: 0; font-size: 14px; }
+.ranking-empty .btn { margin-top: 18px; }
+.ranking-table-scroll { overflow-x: auto; padding: 4px; }
+.ranking-table { width: 100%; min-width: 460px; border-collapse: collapse; font-size: 14px; }
+.ranking-table caption { margin-bottom: 12px; text-align: left; font-size: 13px; color: var(--muted); }
+.ranking-table th, .ranking-table td { padding: 15px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.ranking-table thead th { font-size: 12px; white-space: nowrap; color: var(--muted); background: var(--paper); }
+.ranking-table tbody th { font-weight: 500; }
+.ranking-table tbody th strong, .ranking-table tbody th small { display: block; overflow-wrap: anywhere; }
+.ranking-table tbody th small { margin-top: 5px; color: var(--muted); font-size: 12px; }
+.ranking-table .ranking-score { font-weight: 800; color: var(--green); white-space: nowrap; }
+.ranking-ours { background: var(--green-soft); }
+@media (max-width: 900px) {
+  .ranking-layout { grid-template-columns: 1fr; }
+  .ranking-class-fields > .btn { flex: 0 1 auto; }
+}
+@media (max-width: 520px) {
+  .ranking-page { padding-top: 28px; }
+  .ranking-page > h1 { font-size: 32px; }
+  .ranking-registration, .ranking-board { padding: 18px; }
+  .ranking-tabs .btn { padding-inline: 12px; }
+  .ranking-search { flex-wrap: wrap; }
+  .ranking-search input { flex: 1 1 160px; }
+  .ranking-search > .btn { flex: 1 1 auto; }
+  .ranking-class-fields > .btn { flex: 1 1 100%; }
+}
