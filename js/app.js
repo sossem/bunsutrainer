@@ -14,7 +14,17 @@
   let toastTimer;
   const button = (action,label,style='',icon='',extra='') => `<button type="button" class="btn ${style}" data-action="${action}" ${extra}>${icon?U.icon(icon):''}${label}</button>`;
   const extras = SessionExtras.create({state,button,esc:E,render,notify});
-  const rankingUI = RankingUI.create({esc:E,button,notify,onChange:()=>{if(state.view==='ranking')render();}});
+  const rankingUI = RankingUI.create({esc:E,button,notify,onChange:()=>{if(state.view==='legacy-ranking')render();}});
+  const competitionUI = CompetitionUI.create({esc:E,button,notify,
+    onChange:()=>{if(['competition-entry','competition-ranking'].includes(state.view))render();},
+    onEnter:identity=>{
+      state.mode='personal';state.view='setup';state.session=null;
+      const grade=identity.classroom.grade;
+      state.settings={...state.settings,grade,unit:B.curriculum.find(g=>g.grade===grade).units[0].id,type:'all',
+        timerSeconds:0,autoReveal:false,rankingEnabled:true,rankingMode:'online',gamificationEnabled:true,
+        includeMixed:true,includeBorrow:true,requireReduction:false};
+      render();window.scrollTo(0,0);
+    }});
   let rankingReturn = 'home';
   const current = () => state.session.problems[state.session.index];
   const response = () => state.session.responses[state.session.index];
@@ -28,13 +38,20 @@
     clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.classList.remove('visible'),4500);
   }
   function header() {
-    return `<header class="site-header"><button class="brand" data-action="home" aria-label="분수 교실 처음으로"><span class="brand-mark" aria-hidden="true">¼</span><span>분수 교실<small>FRACTION CLASSROOM</small></span></button><nav class="header-links" aria-label="주요 메뉴"><span class="header-note">하나씩 이해하는 즐거움</span>${button('growth','나의 성장','btn-quiet')}${button('ranking','학급 랭킹','btn-quiet')}${button('history','학습 기록','btn-quiet','history')}${button('help','이용 안내','btn-quiet','help')}</nav></header>`;
+    return `<header class="site-header"><button class="brand" data-action="home" aria-label="분수트레이너 처음으로"><span class="brand-mark" aria-hidden="true">¼</span><span>분수트레이너<small>FRACTION TRAINER</small></span></button><nav class="header-links" aria-label="주요 메뉴">${button('ranking','학급 랭킹','btn-quiet','chart')}${button('history','학습 기록','btn-quiet','history')}${button('help','단축키 안내','btn-quiet','help')}</nav></header>`;
   }
   function home() {
     const records=Store.list(),last=records[0];
-    return `${header()}<main class="page-wrap"><section class="home-intro"><div><span class="eyebrow">초등 4–6학년을 위한 분수 배움터</span><h1>분수, 차근차근.<br><span>혼자서도, 함께라면 더.</span></h1><p>눈으로 이해하고, 직접 풀어보며.<br>오늘의 분수 공부를 시작해 볼까요?</p></div><div class="intro-aside"><i class="status-dot"></i>설치 없이, 가입 없이 바로 시작해요</div></section><section class="mode-grid" aria-label="학습 방식 선택"><button class="mode-card" data-action="mode" data-value="personal"><span class="mode-top">${U.icon('book')} 나의 속도로 배우기</span><h2>개인 학습</h2><p>직접 풀고 바로 확인해요.<br>틀린 문제는 한 번 더, 배움은 한 걸음 더.</p><div class="mode-art paper-art" aria-hidden="true"><i class="art-line"></i><div class="math-line">${U.tokens([{n:3,d:4}])}</div><div class="art-bar"><i></i><i></i><i></i><i></i></div></div><span class="card-cta">혼자 공부할래요 <span class="arrow-circle">${U.icon('arrow')}</span></span></button><button class="mode-card classroom-card" data-action="mode" data-value="classroom"><span class="mode-top">${U.icon('board')} 큰 화면으로 함께 배우기</span><h2>전자칠판 수업</h2><p>한 문제에 집중하고, 생각을 나눠요.<br>힌트부터 풀이까지 선생님과 함께.</p><div class="mode-art board-art" aria-hidden="true"><div class="math-line">${U.tokens([{n:1,d:3},'+',{n:1,d:6}])}</div></div><span class="card-cta">함께 수업할래요 <span class="arrow-circle">${U.icon('arrow')}</span></span></button></section><section class="curriculum-preview"><div class="section-heading"><h2>학년마다, 필요한 배움을 차곡차곡</h2><span>개념 이해부터 계산 연습까지</span></div><div class="grade-preview-grid"><article class="grade-preview"><span class="grade-number">4</span><div><h3>같은 분모에서 시작해요</h3><p>분수의 덧셈과 뺄셈 · 대분수</p></div></article><article class="grade-preview"><span class="grade-number">5</span><div><h3>분수의 세계를 넓혀요</h3><p>약분과 통분 · 덧셈과 뺄셈 · 곱셈</p></div></article><article class="grade-preview"><span class="grade-number">6</span><div><h3>나눗셈의 원리를 발견해요</h3><p>분수의 나눗셈 · 역수와 묶음</p></div></article></div></section><footer class="home-footer"><span class="footer-brand">${U.icon('bulb')}빠르게 푸는 것보다, 이해하며 푸는 것이 중요해요.</span><span>${last?`최근 학습 ${formatDate(last.date)} · ${last.total}문제`:'학습 기록은 지금 사용하는 기기에 저장돼요.'}</span></footer></main>`;
+    return `${header()}<main class="page-wrap"><section class="home-intro"><div><span class="eyebrow">초등 4–6학년을 위한 분수트레이너</span><h1>분수, 차근차근.<br><span>혼자서도, 함께라면 더.</span></h1><p>눈으로 이해하고, 직접 풀어보며.<br>오늘의 분수 공부를 시작해 볼까요?</p></div><div class="intro-aside"><i class="status-dot"></i>선생님과 함께 배우고, 우리 반과 도전해요</div></section><section class="mode-grid" aria-label="학습 방식 선택"><button class="mode-card classroom-card" data-action="mode" data-value="classroom"><span class="mode-top">${U.icon('board')} 전자칠판으로 함께 배우기</span><h2>선생님과 함께 수업</h2><p>한 문제에 집중하고, 생각을 나눠요.<br>힌트부터 풀이까지 선생님과 함께.</p><div class="mode-art board-art" aria-hidden="true"><div class="math-line">${U.tokens([{n:1,d:3},'+',{n:1,d:6}])}</div></div><span class="card-cta">함께 수업할래요 <span class="arrow-circle">${U.icon('arrow')}</span></span></button><button class="mode-card" data-action="mode" data-value="personal"><span class="mode-top">${U.icon('book')} 혼자 연습하고 우리 반에 힘 보태기</span><h2>전국학급랭킹전</h2><p>나만의 닉네임으로 차근차근 풀어요.<br>내 점수와 우리 반 점수가 함께 쌓여요.</p><div class="mode-art paper-art" aria-hidden="true"><i class="art-line"></i><div class="math-line">${U.tokens([{n:3,d:4}])}</div><div class="art-bar"><i></i><i></i><i></i><i></i></div></div><span class="card-cta">랭킹전에 입장할래요 <span class="arrow-circle">${U.icon('arrow')}</span></span></button></section><footer class="home-footer"><span class="footer-brand">${U.icon('bulb')}빠르게 푸는 것보다, 이해하며 푸는 것이 중요해요.</span><span>${last?`최근 학습 ${formatDate(last.date)} · ${last.total}문제`:'학습 기록은 지금 사용하는 기기에 저장돼요.'}</span></footer></main>`;
+  }
+  function competitionSetup() {
+    const s=state.settings,u=unit(),grade=B.curriculum.find(g=>g.grade===s.grade),identity=WeeklyCompetition.getIdentity();
+    const types=[{id:'all',label:'골고루 연습하기'},...(u.id.endsWith('addsub')?typeGroups:[]),...u.types];
+    const rules=LearningGame.RULES;
+    return `${header()}<main class="page-wrap competition-setup"><section class="setup-heading"><span class="pill">${U.icon('book')}전국학급랭킹전</span><h1>오늘, 무엇에 도전해 볼까요?</h1><p>유형을 고르고, 나에게 맞는 난이도로 연습해요.</p></section><div class="competition-context"><div><strong>${E(identity?.nickname||'이번 주 닉네임으로 입장해 주세요')}</strong>${identity?`<p>${E(identity.classroom.id)}</p>`:''}</div>${button('competition-change','학교·닉네임 변경','btn-quiet')}</div><section class="setup-form" aria-label="랭킹전 문제 설정"><div class="form-section"><h2 class="form-title"><span>01</span>연습할 학년과 단원</h2><div class="choice-row">${B.curriculum.map(g=>`<button class="choice ${s.grade===g.grade?'active':''}" data-action="grade" data-value="${g.grade}" aria-pressed="${s.grade===g.grade}"><b>${g.grade}학년</b></button>`).join('')}</div><div class="unit-choices">${grade.units.map(item=>`<button class="choice ${s.unit===item.id?'active':''}" data-action="unit" data-value="${item.id}" aria-pressed="${s.unit===item.id}"><b>${E(item.title)}</b><small>${E(item.description)}</small></button>`).join('')}</div></div><div class="form-section"><h2 class="form-title"><span>02</span>문제 유형을 골라요</h2><div class="competition-type-grid" role="group" aria-label="문제 유형">${types.map(t=>`<button class="choice ${s.type===t.id?'active':''}" data-action="problem-type" data-value="${t.id}" aria-pressed="${s.type===t.id}"><b>${E(t.label)}</b>${t.description?`<small>${E(t.description)}</small>`:''}</button>`).join('')}</div><p class="form-note">${s.grade===4?'값이 같은 분수도 정답이에요.':'문제에 적힌 약분·통분 조건을 확인해요.'}</p></div><div class="form-section"><h2 class="form-title"><span>03</span>나에게 맞는 난이도</h2><div class="choice-row">${levels.map(l=>`<button class="choice ${s.difficulty===l.id?'active':''}" data-action="difficulty" data-value="${l.id}" aria-pressed="${s.difficulty===l.id}"><b>${l.label}</b><small>${l.description}</small><small>정답 ${rules.correct+rules.difficulty[l.id]}점 + 보너스</small></button>`).join('')}</div><p class="form-note">도움 없이 첫 시도에 맞히면 +${rules.firstAttempt}점, ${rules.comboThreshold}문제부터 연속 정답 보너스 +1~${rules.comboBonusMax}점이에요. 시간 제한은 없어요.</p></div><div class="setup-start"><div><span class="field-label">몇 문제에 도전할까요?</span><div class="choice-row" role="group" aria-label="문제 수">${[5,10,20].map(n=>`<button class="choice ${s.count===n?'active':''}" data-action="count" data-value="${n}" aria-pressed="${s.count===n}">${n}문제</button>`).join('')}</div></div>${button('start','도전 시작하기','btn-primary','arrow')}</div><p class="form-note">5문제 이상 끝까지 학습한 새 세트의 점수를 나와 우리 반에 함께 반영해요. 건너뛰거나 다시 푸는 오답 세트는 랭킹에 반영하지 않아요.</p></section></main>`;
   }
   function setup() {
+    if(state.mode==='personal')return competitionSetup();
     const s=state.settings,u=unit(),classroom=state.mode==='classroom',grade=B.curriculum.find(g=>g.grade===s.grade);
     const mixedAvailable=u.types.some(t=>t.mixed),borrowAvailable=u.id==='g4-addsub'||u.id==='g5-addsub';
     const borrowRequired=u.types.some(t=>t.id===s.type&&t.borrow);
@@ -45,7 +62,11 @@
   function start(problems=null, settings=null) {
     try {
       if(settings)state.settings={...state.settings,...settings};
-      if(state.mode==='personal'&&state.settings.rankingEnabled&&!ClassRanking.getSelection()){notify('학급 랭킹에서 우리 반을 먼저 선택해 주세요.');return;}
+      if(state.mode==='personal'&&!problems&&!WeeklyCompetition.getIdentity()){
+        notify('이번 주 닉네임으로 입장한 뒤 학습을 시작해 주세요.');
+        state.view='competition-entry';competitionUI.openEntry();return;
+      }
+      if(state.mode==='personal')Object.assign(state.settings,{timerSeconds:0,autoReveal:false,rankingEnabled:!problems,rankingMode:'online',gamificationEnabled:!problems,includeMixed:true,includeBorrow:true,requireReduction:false});
       const previous=state.session?.problems || [];
       const set=problems || B.generateSet(state.settings,previous);
       extras.destroy();
@@ -138,7 +159,7 @@
   }
   function history() {
     const records=Store.list();
-    return `${header()}<main class="report-wrap"><span class="eyebrow">조금씩 쌓이는 나의 성장</span><div class="history-heading"><h1>학습 기록</h1>${button('clear-history','기록 지우기','btn-quiet','',''+(records.length?'':'disabled'))}</div><p>이 브라우저에 최근 ${Store.limit}회의 학습을 보관해요. 다른 기기와는 공유되지 않아요. 기록을 지워도 별도로 저장한 성장 경험치와 배지는 유지돼요.</p>${!Store.available()?'<p class="storage-note">기기 저장을 사용할 수 없어요. 현재 창에 있는 기록만 확인할 수 있어요.</p>':''}${records.length?records.map(r=>{const u=B.getUnit(r.settings.grade,r.settings.unit),wrong=safeProblems(r.wrongProblems);return `<article class="history-row"><div><span class="eyebrow">${formatDate(r.date)} · ${E(r.settings.grade)}학년</span><h3>${E(u?.title||'분수 학습')}</h3><p>${E(u?.types.find(t=>t.id===r.settings.type)?.label||typeGroups.find(t=>t.id===r.settings.type)?.label||'여러 유형')} · ${E(levels.find(l=>l.id===r.settings.difficulty)?.label||'기본')} · ${r.total}문제 · 첫 풀이 ${r.firstCorrect}개 정답 (${r.total?Math.round(r.firstCorrect/r.total*100):0}%) · ${duration(r.durationSeconds)}</p>${extras.recordHtml(r)}</div>${button('review-history',`다시 풀기 ${wrong.length}문제`,'','refresh',`data-value="${E(r.id)}" ${wrong.length?'':'disabled'}`)}</article>`;}).join(''):`<div class="empty-state"><h2>첫 번째 배움을 기다리고 있어요</h2><p>개인 학습을 마치면 정답률과 다시 풀 문제가 여기에 쌓여요.</p></div>`}<div class="actions" style="margin-top:25px">${button('mode','개인 학습 시작','btn-primary','book','data-value="personal"')}${button('home','처음으로','btn-quiet','back')}</div></main>`;
+    return `${header()}<main class="report-wrap"><span class="eyebrow">차곡차곡 쌓인 학습 기록</span><div class="history-heading"><h1>학습 기록</h1>${button('clear-history','기록 지우기','btn-quiet','',''+(records.length?'':'disabled'))}</div><p>이 브라우저에 최근 ${Store.limit}회의 학습을 보관해요. 다른 기기와는 공유되지 않아요. 기록을 지워도 서버에 반영한 주간 랭킹 점수는 유지돼요.</p>${!Store.available()?'<p class="storage-note">기기 저장을 사용할 수 없어요. 현재 창에 있는 기록만 확인할 수 있어요.</p>':''}${records.length?records.map(r=>{const u=B.getUnit(r.settings.grade,r.settings.unit),wrong=safeProblems(r.wrongProblems);return `<article class="history-row"><div><span class="eyebrow">${formatDate(r.date)} · ${E(r.settings.grade)}학년</span><h3>${E(u?.title||'분수 학습')}</h3><p>${E(u?.types.find(t=>t.id===r.settings.type)?.label||typeGroups.find(t=>t.id===r.settings.type)?.label||'여러 유형')} · ${E(levels.find(l=>l.id===r.settings.difficulty)?.label||'기본')} · ${r.total}문제 · 첫 풀이 ${r.firstCorrect}개 정답 (${r.total?Math.round(r.firstCorrect/r.total*100):0}%) · ${duration(r.durationSeconds)}</p>${extras.recordHtml(r)}</div>${button('review-history',`다시 풀기 ${wrong.length}문제`,'','refresh',`data-value="${E(r.id)}" ${wrong.length?'':'disabled'}`)}</article>`;}).join(''):`<div class="empty-state"><h2>첫 번째 배움을 기다리고 있어요</h2><p>개인 학습을 마치면 정답률과 다시 풀 문제가 여기에 쌓여요.</p></div>`}<div class="actions" style="margin-top:25px">${button('mode','전국학급랭킹전 입장','btn-primary','book','data-value="personal"')}${button('home','처음으로','btn-quiet','back')}</div></main>`;
   }
   function classroomEnd() {
     const problems=state.session.problems;
@@ -158,15 +179,16 @@
     const focusValue=focused?.dataset?.value;
     const board=state.view==='session'&&state.mode==='classroom';
     document.body.className=`${board?'classroom-mode':''}${document.fullscreenElement?' fullscreen':''}`;
-    app.innerHTML=state.view==='home'?home():state.view==='setup'?setup():state.view==='session'?(board?classroom():personal()):state.view==='results'?results():state.view==='history'?history():state.view==='growth'?`${header()}<main class="report-wrap">${extras.growthHtml()}</main>`:state.view==='ranking'?`${header()}<main class="report-wrap">${button('ranking-back','이전 화면으로','btn-quiet','back')}${rankingUI.render()}</main>`:classroomEnd();
+    if(!['competition-entry','competition-ranking'].includes(state.view))competitionUI.leave();
+    app.innerHTML=state.view==='home'?home():state.view==='setup'?setup():state.view==='session'?(board?classroom():personal()):state.view==='results'?results():state.view==='history'?history():state.view==='competition-entry'?`${header()}<main class="report-wrap">${button('home','처음으로','btn-quiet','back')}${competitionUI.entryHtml()}</main>`:state.view==='competition-ranking'?`${header()}<main class="report-wrap">${button('ranking-back','이전 화면으로','btn-quiet','back')}${competitionUI.boardHtml()}</main>`:state.view==='legacy-ranking'?`${header()}<main class="report-wrap">${button('ranking','주간 랭킹으로','btn-quiet','back')}${rankingUI.render()}</main>`:classroomEnd();
     extras.sync();
-    document.title=`${board?'수업 중 · ':''}분수 교실`;
+    document.title=`${board?'수업 중 · ':''}분수트레이너`;
     const restore=focusId?document.getElementById(focusId):focusAction?[...app.querySelectorAll('[data-action]')].find(el=>el.dataset.action===focusAction&&el.dataset.value===focusValue&&!el.disabled):null;
     if(restore&&restore!==document.body)restore.focus({preventScroll:true});
   }
   function openHelp() {
     extras.pause();
-    dialog.innerHTML=`<div class="dialog-header"><h2 id="dialog-title">${state.mode==='classroom'?'수업을 편하게, 키보드로':'분수 교실 이용 안내'}</h2>${button('close-dialog','닫기','btn-quiet','close')}</div><div class="help-list">${[['→','다음 문제'],['←','이전 문제'],['Space','정답 보기'],['H','힌트'],['S','풀이 보기'],['F','전체화면'],['T','타이머 시작 / 일시정지'],['R','타이머 초기화']].map(([key,label])=>`<div><kbd>${key}</kbd>${label}</div>`).join('')}</div><p>단축키는 전자칠판 수업 중에만 작동해요. 입력 칸이나 이 도움말이 열려 있을 때는 작동하지 않아요. 풀이 보기는 정답 공개 후 사용할 수 있어요.</p><p>전체화면은 F 또는 화면의 버튼으로 켜고 끌 수 있어요. Esc로도 나올 수 있어요. 그림을 열면 막대·원·수직선으로 분수의 양을 확인할 수 있어요.</p><p>개인 학습: Tab으로 자연수·분자·분모 칸을 이동하고 Enter로 제출해요. 틀린 문제와 풀이를 본 문제는 학습 결과에서 다시 풀 수 있어요.</p>`;
+    dialog.innerHTML=`<div class="dialog-header"><h2 id="dialog-title">${state.mode==='classroom'?'수업을 편하게, 키보드로':'분수트레이너 단축키 안내'}</h2>${button('close-dialog','닫기','btn-quiet','close')}</div><div class="help-list">${[['→','다음 문제'],['←','이전 문제'],['Space','정답 보기'],['H','힌트'],['S','풀이 보기'],['F','전체화면'],['T','타이머 시작 / 일시정지'],['R','타이머 초기화']].map(([key,label])=>`<div><kbd>${key}</kbd>${label}</div>`).join('')}</div><p>단축키는 전자칠판 수업 중에만 작동해요. 입력 칸이나 이 도움말이 열려 있을 때는 작동하지 않아요. 풀이 보기는 정답 공개 후 사용할 수 있어요.</p><p>전체화면은 F 또는 화면의 버튼으로 켜고 끌 수 있어요. Esc로도 나올 수 있어요. 그림을 열면 막대·원·수직선으로 분수의 양을 확인할 수 있어요.</p><p>개인 학습: Tab으로 자연수·분자·분모 칸을 이동하고 Enter로 제출해요. 틀린 문제와 풀이를 본 문제는 학습 결과에서 다시 풀 수 있어요.</p>`;
     dialog.showModal();
   }
   async function fullscreen() {
@@ -174,18 +196,30 @@
     catch(_){notify('전체화면을 열 수 없어요. 브라우저의 전체화면 기능을 사용해 주세요.');}
   }
   function action(name,value) {
-    if(extras.action(name,value)||rankingUI.action(name,value))return;
-    if(name==='ranking-back'){state.view=rankingReturn;render();return;}
-    if(name==='ranking'||name==='growth'){if(state.view==='session'&&state.mode==='personal')finish();extras.pause();if(name==='ranking'&&state.view!=='ranking')rankingReturn=state.view;state.view=name;render();window.scrollTo(0,0);return;}
+    if(extras.action(name,value))return;
+    if(['competition-entry','competition-ranking'].includes(state.view)&&competitionUI.action(name,value))return;
+    if(state.view==='legacy-ranking'&&rankingUI.action(name,value))return;
+    if(name==='ranking-back'){state.view=rankingReturn;if(state.view==='competition-entry')competitionUI.openEntry();else render();return;}
+    if(name==='ranking'){if(state.view==='session'&&state.mode==='personal')finish();extras.pause();if(!['competition-ranking','legacy-ranking'].includes(state.view))rankingReturn=state.view;state.view='competition-ranking';competitionUI.openBoard();window.scrollTo(0,0);return;}
+    if(name==='legacy-ranking'){state.view='legacy-ranking';render();window.scrollTo(0,0);return;}
     if(name==='close-dialog'){dialog.close();return;}
     if(name==='help'){openHelp();return;}
     if(name==='fullscreen'){fullscreen();return;}
     if(name==='home'){if(state.view==='session'&&state.mode==='personal'){finish();return;}extras.destroy();state.view='home';state.session=null;render();window.scrollTo(0,0);return;}
     if(name==='history'){if(state.view==='session'&&state.mode==='personal')finish();state.view='history';render();window.scrollTo(0,0);return;}
-    if(name==='mode'){extras.destroy();state.mode=value;state.view='setup';state.session=null;render();window.scrollTo(0,0);return;}
+    if(name==='mode'||name==='competition-change'){
+      extras.destroy();state.mode=name==='competition-change'?'personal':value;state.session=null;
+      if(state.mode==='personal'){state.view='competition-entry';competitionUI.openEntry();}
+      else{state.view='setup';render();}
+      window.scrollTo(0,0);return;
+    }
     if(name==='grade'){state.settings.grade=Number(value);state.settings.unit=B.curriculum.find(g=>g.grade===Number(value)).units[0].id;state.settings.type='all';state.settings.requireReduction=false;render();return;}
     if(name==='unit'){state.settings.unit=value;state.settings.type='all';state.settings.requireReduction=false;render();return;}
     if(name==='difficulty'){state.settings.difficulty=value;render();return;}
+    if(name==='problem-type'&&state.mode==='personal'){
+      if(['all',...typeGroups.map(t=>t.id),...unit().types.map(t=>t.id)].includes(value)){state.settings.type=value;render();}return;
+    }
+    if(name==='count'&&[5,10,20].includes(Number(value))){state.settings.count=Number(value);render();return;}
     if(name==='start'){start();window.scrollTo(0,0);return;}
     if(name==='settings'){extras.pause();state.settings={...state.session.settings};state.view='setup';render();window.scrollTo(0,0);return;}
     if(name==='resume'){state.settings={...state.session.settings};state.mode=state.session.mode;state.view='session';render();return;}
@@ -210,7 +244,8 @@
   }
   document.addEventListener('click',event=>{const target=event.target.closest('[data-action]');if(target&&!target.disabled)action(target.dataset.action,target.dataset.value);});
   app.addEventListener('change',event=>{
-    if(rankingUI.change(event))return;
+    if(['competition-entry','competition-ranking'].includes(state.view)&&competitionUI.change(event))return;
+    if(state.view==='legacy-ranking'&&rankingUI.change(event))return;
     const key=event.target.dataset.setting;if(!key)return;
     if(key==='timerSeconds'){
       if(event.target.value==='custom'){document.getElementById('timer-custom')?.focus();return;}
@@ -222,7 +257,7 @@
     if(key==='type'&&unit().types.some(t=>t.id===state.settings.type&&t.borrow))state.settings.includeBorrow=true;
     const id=event.target.id;render();if(id)document.getElementById(id)?.focus({preventScroll:true});
   });
-  app.addEventListener('input',event=>{if(state.view==='session'&&state.mode==='personal'&&event.target.name)response().draft[event.target.name]=event.target.value;});
+  app.addEventListener('input',event=>{if(state.view==='competition-entry'&&competitionUI.input(event))return;if(state.view==='session'&&state.mode==='personal'&&event.target.name)response().draft[event.target.name]=event.target.value;});
   app.addEventListener('submit',event=>{if(event.target.id==='answer-form'){event.preventDefault();submit();}});
   document.addEventListener('keydown',event=>{
     if(event.key==='Escape'&&document.fullscreenElement&&!dialog.open){document.exitFullscreen().catch(()=>{});return;}
@@ -233,7 +268,11 @@
     if(mapping[key]){event.preventDefault();action(mapping[key]);}
   });
   document.addEventListener('fullscreenchange',()=>{if(state.view==='session')render();});
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)extras.pause();});
-  window.addEventListener('pagehide',()=>extras.destroy());
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden){extras.pause();competitionUI.leave();}
+    else if(state.view==='competition-ranking')competitionUI.openBoard();
+    else if(state.view==='competition-entry')competitionUI.openEntry();
+  });
+  window.addEventListener('pagehide',()=>{extras.destroy();competitionUI.destroy();});
   render();
 })();

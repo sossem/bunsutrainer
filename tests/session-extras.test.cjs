@@ -16,7 +16,7 @@ function fixture({ mode = 'personal', elapsedSeconds = 0, autoReveal = false, re
     }
   };
   const values = new Map(record ? [[record.id, record]] : []);
-  let saves = 0, callbacks, resolveContribution, rejectContribution;
+  let saves = 0, timerCreations = 0, callbacks, resolveContribution, rejectContribution;
   const contribution = new Promise((resolve, reject) => { resolveContribution = resolve; rejectContribution = reject; });
   const snapshot = () => ({ enabled: true, seconds: 10, remaining: Math.ceil(10 - elapsedSeconds),
     elapsedSeconds, running: elapsedSeconds < 10, expired: elapsedSeconds >= 10 });
@@ -24,7 +24,8 @@ function fixture({ mode = 'personal', elapsedSeconds = 0, autoReveal = false, re
   const context = vm.createContext({
     document: { querySelector() { return null; } }, performance: { now: () => elapsedSeconds * 1000 },
     ClassRanking: { getSelection: () => null, updateClassScore: () => contribution },
-    StudyTimer: { create(options) { callbacks = options; return clock; } },
+    WeeklyCompetition: { getIdentity: () => null, submit: () => contribution },
+    StudyTimer: { create(options) { timerCreations++; callbacks = options; return clock; } },
     LearningStorage: {
       save(value) { saves++; values.set(value.id, value); return { ok: true }; },
       list: () => [...values.values()], clear: () => values.clear()
@@ -35,7 +36,7 @@ function fixture({ mode = 'personal', elapsedSeconds = 0, autoReveal = false, re
   const extras = context.SessionExtras.create({ state, button: () => '', esc: String, render() {}, notify() {} });
   extras.sync();
   return { extras, state, expire: () => callbacks.onExpire(), store: context.LearningStorage,
-    saves: () => saves, resolveContribution, rejectContribution };
+    saves: () => saves, timerCreations: () => timerCreations, resolveContribution, rejectContribution };
 }
 
 test('Classroom expiration reveals an unanswered problem without changing the question', () => {
@@ -57,15 +58,31 @@ test('Classroom expiration preserves a solution or visual after the teacher has 
   }
 });
 
-test('Speed rewards use exact elapsed time at the half-time boundary', () => {
-  for (const [elapsedSeconds, expectedScore] of [[4.99, 15], [5, 15], [5.01, 13], [5.99, 13]]) {
+test('Personal competition has no timer or speed bonus even when older settings enable it', () => {
+  for (const elapsedSeconds of [4.99, 5, 5.01, 5.99]) {
     const f = fixture({ elapsedSeconds });
     const answer = f.state.session.responses[0];
     Object.assign(answer, { correct: true, firstCorrect: true, attempts: [{ correct: true }] });
     f.extras.submitted(answer, { correct: true, valid: true });
-    assert.equal(answer.score, expectedScore, `${elapsedSeconds} seconds elapsed`);
-    assert.equal(f.state.session.score, expectedScore);
+    assert.equal(answer.score, 13, `${elapsedSeconds} seconds elapsed`);
+    assert.equal(f.state.session.score, 13);
+    assert.equal(f.timerCreations(), 0);
+    assert.equal(f.extras.clockHtml(), '');
+    assert.equal(f.extras.setupHtml(), '');
   }
+});
+
+test('Weekly contributions retain nickname metadata and deleted histories stay deleted', async () => {
+  const record = { id: 'weekly', classContributionStatus: 'pending', rankingMode: 'online',
+    competition: { weekId: '20260914', playerId: 'student', nickname: '공부하는고양이' } };
+  const f = fixture({ record });
+  const pending = f.extras.contribute(record);
+  f.store.clear();
+  f.resolveContribution({ ok: true, message: 'stored' });
+  await pending;
+  assert.equal(record.classContributionStatus, 'synced');
+  assert.equal(record.competition.nickname, '공부하는고양이');
+  assert.equal(f.saves(), 0);
 });
 
 test('Pending ranking responses do not restore a record deleted while waiting', async () => {

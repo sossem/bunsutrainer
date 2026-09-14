@@ -297,6 +297,13 @@ input[type="checkbox"] { width: 19px; height: 19px; margin: 1px 0 0; flex: 0 0 a
 .classroom-review { margin-top: 32px; text-align: left; }
 .classroom-review > summary { padding: 12px 0; cursor: pointer; font-weight: 700; }
 .classroom-review .review-row { flex-wrap: wrap; }
+.competition-setup { padding-bottom: 48px; }
+.competition-context { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; padding: 18px 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--green-soft); }
+.competition-context p { margin: 5px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.competition-type-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 10px; }
+.competition-type-grid .choice { min-height: 64px; }
+.competition-setup .unit-choices { margin-top: 16px; }
+.competition-setup .setup-start { flex-wrap: wrap; }
 
 dialog { width: min(540px, calc(100% - 36px)); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 26px; border: 1px solid #cddbc9; border-radius: 20px; background: #fafcf6; color: var(--ink); box-shadow: 0 24px 100px #183c3633; }
 dialog::backdrop { background: #153c3266; }

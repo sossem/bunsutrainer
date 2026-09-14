@@ -13,10 +13,6 @@
 .session-growth { margin: 16px 0; font-size: 14px; }
 .record-growth { margin: 14px 0; font-size: 13px; }
 .history-row .record-growth { justify-content: flex-start; }
-.growth-profile .stats-grid { margin-bottom: 32px; }
-.badge-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 28px; }
-.badge-list article { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
-.badge-list article p { margin: 0; }
 .header-links { flex-wrap: wrap; }
 .classroom-header .study-timer { flex-shrink: 0; padding: 5px 10px; gap: 8px; }
 .classroom-header .study-timer small { display: none; }

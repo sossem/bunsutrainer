@@ -2,6 +2,7 @@
 import json
 import time
 from browser_test import Browser, ARTIFACTS
+from competition_fixture import install, enter
 
 
 def run():
@@ -13,6 +14,7 @@ def run():
             report["failures"].append(name)
 
     with Browser() as b:
+        install(b)
         # Observe generated data only in the test browser. Production has no test state API.
         b.command("Page.addScriptToEvaluateOnNewDocument", {"source": """
           (() => { let bank; Object.defineProperty(globalThis,'ProblemBank', {
@@ -36,11 +38,17 @@ def run():
                 b.eval("document.exitFullscreen()")
             b.navigate()
             click("mode", mode)
+            if mode == "personal":
+                enter(b)
             click("grade", grade)
             click("unit", unit)
-            setting("type", kind)
+            if mode == "personal":
+                click("problem-type", kind)
+                click("count", count)
+            else:
+                setting("type", kind)
+                setting("count", count)
             click("difficulty", difficulty)
-            setting("count", count)
             click("start")
             b.wait(".problem-equation")
 
@@ -177,11 +185,11 @@ def run():
 
         # The restored original natural-number minus mixed-number exercise is selectable and gradable.
         b.viewport(1366,768)
-        b.navigate();click('mode','personal');click('grade',4)
+        b.navigate();click('mode','classroom');click('grade',4)
         b.click('[data-setting="includeBorrow"]')
         setting('type','whole-minus-mixed')
         check('required borrowing stays enabled for natural minus mixed',b.eval("document.querySelector('[data-setting=includeBorrow]').checked && document.querySelector('[data-setting=includeBorrow]').disabled"))
-        click('start');b.wait('.problem-equation')
+        configure('personal',4,'g4-addsub','whole-minus-mixed',count=5)
         check('natural minus mixed displays a whole first operand',b.eval("__testProblems.every(p=>p.type==='whole-minus-mixed'&&p.operands[0].d===1) && document.querySelector('.problem-equation').firstElementChild.classList.contains('whole')"))
         answer_problem(multiply=2)
         check('natural minus mixed accepts an equivalent unreduced answer',b.eval("document.querySelector('.feedback').textContent.includes('정답이에요')"))
@@ -234,8 +242,8 @@ def run():
         # No server, fetch, ES-module loader or SDK is required when opening the HTML directly.
         b.command('Page.navigate',{'url':(ARTIFACTS.parents[1]/'index.html').as_uri()})
         b.wait_for("location.protocol==='file:' && document.readyState==='complete'")
-        b.wait('.mode-card');click('mode','personal');click('start');b.wait('#answer-form')
-        check('index.html directly opens and generates personal problems',b.eval("!!document.querySelector('.problem-equation')"))
+        b.wait('.mode-card');click('mode','classroom');click('start');b.wait('.classroom-stage')
+        check('index.html directly opens and generates classroom problems',b.eval("!!document.querySelector('.problem-equation')"))
         b.eval('document.body.offsetHeight')
         report['consoleErrors']=b.console_errors
         check('zero browser console errors',not b.console_errors)

@@ -58,6 +58,23 @@ test('Legacy version-1 records survive reading, adding extended records and relo
   for (const key of Object.keys(extension())) assert.equal(Object.hasOwn(history[1], key), false, key);
 });
 
+test('Weekly nickname identity round-trips without changing legacy history or keys', () => {
+  const original = legacyRecord();
+  const local = storage({ [KEY]: JSON.stringify({ version: 1, records: [original] }) });
+  const classroom = { id: '[서울 중구] 배움초등학교 5학년 2반', schoolName: '배움초등학교', region: '서울 중구', grade: 5, className: '2' };
+  const competition = { weekId: '20260914', nickname: '공부하는고양이', playerId: `${classroom.id}::공부하는고양이`, classroom };
+  const store = adapter(local);
+  assert.equal(store.save({ ...legacyRecord('weekly'), ...extension(), competition }).ok, true);
+  const reloaded = adapter(local).list();
+  assert.deepEqual(plain(reloaded.find(r => r.id === 'weekly').competition), competition);
+  assert.deepEqual(plain(reloaded.find(r => r.id === 'legacy')), original);
+  assert.equal(JSON.parse(local.getItem(KEY)).version, 1);
+  for (const invalid of [null, {}, { ...competition, weekId: 'old' }, { ...competition, classroom: { ...classroom, grade: 7 } }]) {
+    assert.equal(store.save({ ...legacyRecord('invalid-identity'), competition: invalid }).ok, true);
+    assert.equal(Object.hasOwn(store.list().find(r => r.id === 'invalid-identity'), 'competition'), false);
+  }
+});
+
 test('Every extension field and nested per-question metadata round-trips without external modules', () => {
   const local = storage(), store = adapter(local);
   const record = {

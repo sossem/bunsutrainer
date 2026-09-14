@@ -88,6 +88,7 @@
   /* All transaction reads precede writes. The receipt makes network retries safe. */
   function createFirestoreProvider(db) {
     return Object.freeze({
+      getDatabase: () => db,
       async read({ collection, limit = 50, classId = null }) {
         const reference = db.collection(collection);
         const snapshot = await reference.orderBy('score', 'desc').limit(limit).get();
@@ -264,7 +265,7 @@
     }
     return Object.freeze({ getWeekIds, getSelection, selectClass, clearSelection, searchSchools, getRankingData, updateClassScore });
   }
-  const api = Object.freeze({ ...createRepository(), createRepository, createFirestoreProvider, keys: Object.freeze({ selection: CLASS_KEY, demo: DEMO_KEY }) });
+  const api = Object.freeze({ ...createRepository(), createRepository, createFirestoreProvider, getOnlineProvider: defaultProvider, keys: Object.freeze({ selection: CLASS_KEY, demo: DEMO_KEY }) });
   root.ClassRanking = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);

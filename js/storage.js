@@ -59,6 +59,22 @@
         };
       }
     } catch (_) { /* Keep ordinary history even if the classroom snapshot is invalid. */ }
+    try {
+      const field = Object.getOwnPropertyDescriptor(record, 'competition');
+      const identity = field && field.value;
+      const classroom = identity && identity.classroom;
+      if (identity && typeof identity === 'object' && !Array.isArray(identity)
+          && /^\d{8}$/.test(identity.weekId) && shortText(identity.playerId, 240)
+          && shortText(identity.nickname, 40) && classroom && typeof classroom === 'object'
+          && shortText(classroom.id, 220) && shortText(classroom.schoolName, 100)
+          && shortText(classroom.region, 80) && Number.isInteger(classroom.grade)
+          && classroom.grade >= 4 && classroom.grade <= 6
+          && /^(?:[1-9]|[12]\d|30)$/.test(classroom.className)) {
+        extra.competition = { weekId: identity.weekId, playerId: identity.playerId, nickname: identity.nickname,
+          classroom: { id: classroom.id, schoolName: classroom.schoolName, region: classroom.region,
+            grade: classroom.grade, className: classroom.className } };
+      }
+    } catch (_) { /* New weekly identity fields do not affect older study records. */ }
     return extra;
   }
   function normalize(record) {

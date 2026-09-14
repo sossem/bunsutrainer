@@ -1,4 +1,4 @@
-"""Browser integration checks for optional timers, rewards, and demo contribution.
+"""Browser integration checks for classroom timers and removal of personal learning tools.
 
 Run: python tests/extension_scenarios.py
 Uses a dedicated local browser profile; no online ranking write is performed.
@@ -7,6 +7,7 @@ import json
 import time
 
 from browser_test import ARTIFACTS, Browser
+from competition_fixture import install, enter
 
 
 def run():
@@ -20,6 +21,7 @@ def run():
     browser = Browser(http_port=8768, debug_port=9226)
     browser.profile = ARTIFACTS / "extension-browser-profile"
     with browser as b:
+        install(b)
         # Observers only exist in this browser. The app has no exposed session API.
         b.command("Page.addScriptToEvaluateOnNewDocument", {"source": """
           (() => {
@@ -54,23 +56,23 @@ def run():
               e.dispatchEvent(new Event('change',{bubbles:true}));})()"""
                    .replace("SELECTOR", json.dumps(selector)).replace("VALUE", json.dumps(value)))
 
-        def configure(mode="classroom", seconds=30, auto=False, game=True, ranking=False,
+        def configure(mode="classroom", seconds=30, auto=False,
                       grade=5, unit="g5-addsub", kind="borrow", difficulty="challenge"):
             b.navigate()
             click("mode", mode)
+            if mode == "personal":
+                enter(b)
             click("grade", grade)
             click("unit", unit)
-            setting("type", kind)
-            click("difficulty", difficulty)
-            setting("count", 5)
-            setting("timerSeconds", seconds, "#timer-custom")
             if mode == "personal":
-                setting("gamificationEnabled", game)
-                setting("rankingEnabled", ranking)
-                if ranking:
-                    setting("rankingMode", "demo")
+                click("problem-type", kind)
+                click("count", 5)
             else:
+                setting("type", kind)
+                setting("count", 5)
+                setting("timerSeconds", seconds, "#timer-custom")
                 setting("autoReveal", auto)
+            click("difficulty", difficulty)
             click("start")
             b.wait(".problem-equation")
 
@@ -189,80 +191,43 @@ def run():
         b.wait(".answer-panel")
         check("auto reveal shows answer on expiry and keeps question", b.eval("document.querySelector('.classroom-counter').textContent.includes('문제 1')") and timer()["expired"])
 
+        # Personal timers and growth profiles were explicitly removed. Scoring still
+        # feeds weekly competition, and old growth data must remain untouched.
         b.viewport(1366, 768)
-        configure("personal", seconds=1, grade=4, unit="g4-addsub", kind="proper-add", difficulty="normal")
-        b.wait_for("document.querySelector('[data-timer]').classList.contains('timer-expired')")
-        check("personal expiry leaves answer entry available", b.eval("!!document.querySelector('#answer-form') && !document.querySelector('.study-reveal') && document.querySelector('.problem-tag').textContent.includes('문제 1')"))
-        answer(0)
-        check("answer accepted after personal timeout without speed or combo bonus", b.eval("document.querySelector('.session-growth').textContent.includes('성장 점수 11점') && document.querySelector('.session-growth').textContent.includes('연속 정답 0개')"))
-        click("finish")
-        timeout_record = b.eval("LearningStorage.list()[0]")
-        check("timeout and timer settings saved", timeout_record["timeoutCount"] == 1 and timeout_record["timerSeconds"] == 1 and timeout_record["timerEnabled"] and not timeout_record["completed"])
-
-        configure("personal", seconds=30, grade=4, unit="g4-addsub", kind="proper-add", difficulty="normal")
-        click("timer-toggle")
-        check("personal timer pause button works", not timer()["running"])
-        click("timer-toggle")
-        check("personal timer start button works", timer()["running"])
-        answer(0)
-        check("solved question stops timer and disables both controls", not timer()["running"] and b.eval("[...document.querySelectorAll('[data-timer] button')].every(e=>e.disabled)"))
-        frozen = timer()["elapsedSeconds"]
-        time.sleep(0.2)
-        check("solved timer remains stopped", timer()["elapsedSeconds"] == frozen)
-        click("next")
-        click("solution")
-        check("revealing personal solution stops timer and locks controls", not timer()["running"] and b.eval("[...document.querySelectorAll('[data-timer] button')].every(e=>e.disabled)"))
-
+        b.navigate()
+        b.eval("localStorage.setItem(LearningGame.key, JSON.stringify({version:1,legacySentinel:'keep'}))")
+        legacy = b.eval("localStorage.getItem(LearningGame.key)")
+        configure("personal", grade=4, unit="g4-addsub", kind="proper-add", difficulty="normal")
+        check("personal mode creates no timer", b.eval("__testTimers.length===0 && !document.querySelector('[data-timer]')"))
+        check("removed growth page is absent from navigation", b.eval("!document.querySelector('[data-action=growth]')"))
         for width, height in [(1366, 768), (768, 1024), (390, 844)]:
             b.viewport(width, height)
-            configure("personal", seconds=30)
-            layout(f"{width}x{height} personal timer")
-            b.screenshot(f"timer-personal-{width}x{height}.png")
-            click("solution")
-            layout(f"{width}x{height} personal timer solution")
-
-        # Begin a clean study history for the exact demo contribution assertion.
-        b.viewport(1366, 768)
-        b.navigate()
-        b.eval("localStorage.clear()")
-        b.navigate()
-        selected = b.eval("ClassRanking.selectClass({schoolName:'테스트초등학교',region:'테스트 지역',grade:4,className:'1'})")
-        check("test class selected locally", selected["ok"])
-        configure("personal", seconds=30, ranking=True, grade=4, unit="g4-addsub", kind="proper-add", difficulty="normal")
+            layout(f"{width}x{height} personal without timer")
+            b.screenshot(f"personal-no-timer-{width}x{height}.png")
+        b.key('t');b.key('r')
+        check("personal T and R do not create a background timer", b.eval("__testTimers.length===0"))
         for index in range(5):
             answer(index)
             click("next")
-        b.wait_for("LearningStorage.list()[0]?.classContributionStatus==='demo'")
+        b.wait_for("LearningStorage.list()[0]?.classContributionStatus==='synced'")
         record = b.eval("LearningStorage.list()[0]")
-        check("completed timed study saves rewards and optional history fields", record["completed"] and record["correct"] == 5 and record["firstCorrect"] == 5 and record["score"] == 81 and record["comboMax"] == 5 and record["expEarned"] == 50 and record["averageSolveSeconds"] > 0 and record["timeoutCount"] == 0, record)
-        check("demo completion stores participation receipt", record["rankingEnabled"] and record["rankingMode"] == "demo" and record["classContributionStatus"] == "demo" and record["classScoreContribution"] == 55)
-        check("result displays reward and demo status", b.eval("document.querySelector('.record-growth').textContent.includes('성장 81점') && document.querySelector('.record-growth').textContent.includes('데모 반영 완료 (55점)')"))
-        ranking = b.eval("ClassRanking.getRankingData({mode:'demo'})")
-        check("five solved answers contribute to selected demo class", ranking["ourClass"]["score"] == 55 and ranking["ourClass"]["totalSolved"] == 5 and ranking["ourClass"]["sessions"] == 1)
-        duplicate = b.eval("ClassRanking.updateClassScore(LearningStorage.list()[0],{mode:'demo'})")
-        ranking_again = b.eval("ClassRanking.getRankingData({mode:'demo'})")
-        check("repeated demo contribution does not add points twice", duplicate["ok"] and duplicate["duplicate"] and ranking_again["ourClass"] == ranking["ourClass"])
-        profile = b.eval("LearningGame.profile()")
-        click("growth")
-        check("growth page shows earned XP and first badge", profile["xp"] == 50 and profile["totalSolved"] == 5 and profile["completedSessions"] == 1 and b.eval("document.querySelector('.growth-profile').textContent.includes('첫 걸음') && document.querySelector('.growth-profile').textContent.includes('경험치 50')"))
-        b.screenshot("growth-earned.png")
-        b.navigate()
-        click("history")
-        check("history reload preserves optional fields and demo status", b.eval("document.querySelector('.record-growth').textContent.includes('데모 반영 완료')") and b.eval("LearningStorage.list()[0].score") == 81)
-        check("reload does not reissue rewards", b.eval("LearningGame.profile()") == profile)
-
-        configure("personal", seconds=0, game=False, grade=4, unit="g4-addsub", kind="proper-add", difficulty="normal")
-        check("disabled tools omit timer and score UI", b.eval("!document.querySelector('[data-timer]') && !document.querySelector('.session-growth')"))
-        for index in range(5):
-            answer(index)
-            click("next")
-        disabled_record = b.eval("LearningStorage.list()[0]")
-        check("disabled rewards do not change accumulated growth", disabled_record["score"] == 0 and disabled_record["expEarned"] == 0 and b.eval("LearningGame.profile()") == profile)
+        check("personal completion retains untimed score and record", record['completed'] and record['firstCorrect']==5 and record['score']==71 and not record['timerEnabled'] and record['timerSeconds']==0,record)
+        check("removed growth issues no experience or badges",record['expEarned']==0 and record['badgesEarned']==[])
+        check("legacy growth data is preserved",b.eval("localStorage.getItem(LearningGame.key)")==legacy)
+        b.navigate();click('history')
+        check("history reload preserves competition contribution",b.eval("document.querySelector('.record-growth').textContent.includes('랭킹 반영 완료') && LearningStorage.list()[0].score===71"))
+        configure(seconds=0)
+        check("untimed classroom creates no timer", b.eval("__testTimers.length===0 && !document.querySelector('[data-timer]')"))
+        configure(seconds=30)
+        click('finish')
+        check("classroom finish destroys background timers",b.eval("__testTimers.every(t=>!t.snapshot().running)"))
+        click('home')
+        check("home leaves no running classroom timer",b.eval("__testTimers.every(t=>!t.snapshot().running)"))
         b.eval("document.body.offsetHeight")
         requests = [event["params"]["request"]["url"] for event in b.events
                     if event.get("method") == "Network.requestWillBeSent"]
         remote = [url for url in requests if url.startswith("http") and not url.startswith(b.base_url)]
-        check("timer reward and demo flow needs no external request", not remote, remote)
+        check("classroom timer and fixture competition need no external request", not remote, remote)
         report["consoleErrors"] = b.console_errors
         check("extension browser console has no errors", not b.console_errors, b.console_errors)
 

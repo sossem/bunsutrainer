@@ -6,6 +6,7 @@ No Firebase request or online contribution is made by these scenarios.
 import json
 
 from browser_test import ARTIFACTS, WORKSPACE, Browser
+from competition_fixture import install
 
 
 def run():
@@ -19,6 +20,7 @@ def run():
     browser = Browser(http_port=8766, debug_port=9224)
     browser.profile = WORKSPACE / "tests" / ".browser-profile-ranking"
     with browser as b:
+        install(b)
         b.command("Page.addScriptToEvaluateOnNewDocument", {"source": """
           (() => {
             const fixture=globalThis.__rankingFixture={reads:[],writes:0,phase:'ready',rows:[],ourClass:null};
@@ -55,6 +57,7 @@ def run():
         b.eval("localStorage.clear()")
         b.navigate()
         click("ranking")
+        click("legacy-ranking")
         check("opening ranking performs no online read", b.eval("__rankingFixture.reads.length===0"))
         check("online is the initial explicit mode", b.eval("document.querySelector('[data-action=ranking-mode][data-value=online]').getAttribute('aria-pressed')==='true'"))
         field("#school-query", "서")
@@ -75,27 +78,19 @@ def run():
         check("demo explicitly loads examples without online reads", b.eval("document.querySelectorAll('.ranking-table tbody tr').length===5&&__rankingFixture.reads.length===0"))
         check("view mode and learning participation are explained separately", b.eval("document.querySelector('.ranking-board').textContent.includes('별개')"))
 
-        # Complete an actual personal session; only its local demo contribution is permitted.
-        click("home")
-        click("mode", "personal")
-        field('[data-setting="type"]', "proper-add")
-        field('[data-setting="count"]', 5)
-        b.click('[data-setting="rankingEnabled"]')
-        check("ranking view mode does not change learning participation mode", b.eval("document.querySelector('#ranking-mode-select').value==='online'"))
-        field("#ranking-mode-select", "demo")
-        click("start")
-        for index in range(5):
-            answer = b.eval(f"__testProblems[{index}].answer")
-            field('[name="num"]', answer["n"], "input")
-            field('[name="den"]', answer["d"], "input")
-            b.click('[type="submit"]')
-            click("next")
-        b.wait_for("LearningStorage.list()[0]?.classContributionStatus==='demo'")
-        check("completed personal session contributes once in demo", b.eval("LearningStorage.list()[0].completed&&LearningStorage.list()[0].firstCorrect===5&&LearningStorage.list()[0].classScoreContribution>0&&__rankingFixture.writes===0"))
-        click("ranking")
+        # New learning uses weekly competition. Historical demo records remain readable.
+        # Seed through the retained legacy repository API, never through a removed setting.
+        b.eval("""(() => {
+          const record={id:'legacy-browser-demo',date:new Date().toISOString(),completed:true,total:5,
+            correct:5,firstCorrect:5,score:55,rankingEnabled:true,rankingMode:'demo',classroom:ClassRanking.getSelection()};
+          globalThis.__legacyDemoRecord=record;
+          return ClassRanking.updateClassScore(record,{mode:'demo'});
+        })()""")
         click("ranking-refresh")
         b.wait(".ranking-ours")
-        check("our demo class is highlighted with its contribution", b.eval("Number(document.querySelector('.ranking-ours .ranking-score').textContent.replaceAll(',',''))===LearningStorage.list()[0].classScoreContribution"))
+        check("our historical demo class is highlighted with its contribution", b.eval("Number(document.querySelector('.ranking-ours .ranking-score').textContent.replaceAll(',',''))===55"))
+        duplicate=b.eval("ClassRanking.updateClassScore(__legacyDemoRecord,{mode:'demo'})")
+        check("legacy demo contribution remains idempotent",duplicate['ok'] and duplicate['duplicate'])
         for width, height in [(1920, 1080), (1366, 768), (390, 844)]:
             b.viewport(width, height)
             b.eval("scrollTo(0,0)")
