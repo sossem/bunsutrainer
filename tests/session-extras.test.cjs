@@ -64,12 +64,26 @@ test('Personal competition has no timer or speed bonus even when older settings 
     const answer = f.state.session.responses[0];
     Object.assign(answer, { correct: true, firstCorrect: true, attempts: [{ correct: true }] });
     f.extras.submitted(answer, { correct: true, valid: true });
-    assert.equal(answer.score, 13, `${elapsedSeconds} seconds elapsed`);
-    assert.equal(f.state.session.score, 13);
+    assert.equal(answer.score, 250, `${elapsedSeconds} seconds elapsed`);
+    assert.equal(f.state.session.score, 250);
     assert.equal(f.timerCreations(), 0);
     assert.equal(f.extras.clockHtml(), '');
     assert.equal(f.extras.setupHtml(), '');
   }
+});
+
+test('Award uses selected variety, appears once, and cannot duplicate on repeated submission', () => {
+  const f = fixture(), s = f.state.session, a = s.responses[0];
+  Object.assign(s.settings, {unit:'g4-addsub',type:'all',difficulty:'challenge'});
+  Object.assign(a, {correct:true,firstCorrect:true});
+  f.extras.submitted(a, {correct:true});
+  assert.equal(s.score,1550);
+  assert.match(f.extras.gameHtml(), /score-burst/);
+  assert.doesNotMatch(f.extras.gameHtml(), /score-burst/);
+  f.extras.submitted(a, {correct:true});
+  assert.equal(s.score,1550);
+  assert.equal(s.combo,1);
+  assert.doesNotMatch(f.extras.gameHtml(), /score-burst/);
 });
 
 test('Weekly contributions retain nickname metadata and deleted histories stay deleted', async () => {

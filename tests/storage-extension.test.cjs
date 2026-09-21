@@ -42,6 +42,18 @@ function extension() {
   };
 }
 
+test('New scoring version and large totals survive reload without changing old scores', () => {
+  const old = {...legacyRecord(), ...extension(), score:71};
+  const local = storage({[KEY]:JSON.stringify({version:1,records:[old]})});
+  const store = adapter(local);
+  assert.equal(store.save({...legacyRecord('new-score'), ...extension(), scoringVersion:2, score:41000, classScoreContribution:41000}).ok,true);
+  const records = plain(adapter(local).list());
+  assert.equal(records[0].scoringVersion,2);
+  assert.equal(records[0].score,41000);
+  assert.equal(records[0].classScoreContribution,41000);
+  assert.deepEqual(records[1],old);
+});
+
 test('Legacy version-1 records survive reading, adding extended records and reloading unchanged', () => {
   const original = legacyRecord();
   const encoded = JSON.stringify({ version: 1, records: [original] });

@@ -90,7 +90,9 @@ def run():
             b.click('[type="submit"]')
 
         b.navigate()
-        b.eval("localStorage.removeItem('bunsu.learning.v1')")
+        # The dedicated profile persists across runs, but the mock server is per tab.
+        # Reset only test learning/login state so a stale registration cannot block entry.
+        b.eval("['bunsu.learning.v1','bunsu.competition.identity.v1','bunsu.competition.drafts.v1'].forEach(key=>localStorage.removeItem(key));sessionStorage.removeItem('__bunsu_browser_competition_db')")
         b.navigate()
         b.screenshot("home-fhd.png")
         check("home separates two modes", b.eval("document.querySelectorAll('.mode-card').length === 2"))

@@ -76,16 +76,17 @@ def run():
         click("ranking-refresh")
         b.wait(".ranking-table")
         check("demo explicitly loads examples without online reads", b.eval("document.querySelectorAll('.ranking-table tbody tr').length===5&&__rankingFixture.reads.length===0"))
-        check("view mode and learning participation are explained separately", b.eval("document.querySelector('.ranking-board').textContent.includes('별개')"))
+        check("historical rankings explain separation from weekly competition", b.eval("document.querySelector('.ranking-board').textContent.includes('전국학급랭킹전') && document.querySelector('.ranking-board').textContent.includes('합산하지')"))
 
         # New learning uses weekly competition. Historical demo records remain readable.
         # Seed through the retained legacy repository API, never through a removed setting.
-        b.eval("""(() => {
+        contribution = b.eval("""(() => {
           const record={id:'legacy-browser-demo',date:new Date().toISOString(),completed:true,total:5,
-            correct:5,firstCorrect:5,score:55,rankingEnabled:true,rankingMode:'demo',classroom:ClassRanking.getSelection()};
+            correct:5,firstCorrect:5,score:55,classScoreContribution:55,rankingEnabled:true,rankingMode:'demo',classroom:ClassRanking.getSelection()};
           globalThis.__legacyDemoRecord=record;
           return ClassRanking.updateClassScore(record,{mode:'demo'});
         })()""")
+        check("historical demo fixture is accepted", contribution['ok'] and contribution['contribution'] == 55)
         click("ranking-refresh")
         b.wait(".ranking-ours")
         check("our historical demo class is highlighted with its contribution", b.eval("Number(document.querySelector('.ranking-ours .ranking-score').textContent.replaceAll(',',''))===55"))

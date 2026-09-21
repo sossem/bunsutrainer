@@ -13,6 +13,7 @@ function localStorage(initial = {}) {
 }
 function moduleAt(context = {}) {
   const sandbox = vm.createContext({ setTimeout, clearTimeout, ...context });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/gamification.js'), 'utf8'), sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/competition.js'), 'utf8'), sandbox);
   return sandbox.WeeklyCompetition;
 }
@@ -174,13 +175,23 @@ test('Completed scores update class and individual together and concurrent retry
   assert.equal([...env.remote.documents.keys()].some(key => key.startsWith('classGrowth')), false);
 });
 
-test('Difficulty-specific scores have matching caps and no timer bonus is accepted', async () => {
+test('Legacy records retain their original difficulty caps', async () => {
   const env = setup(), identity = await join(env);
   for (const [difficulty, maximum] of [['easy', 75], ['normal', 80], ['challenge', 90]]) {
     assert.equal((await env.repo.submit(record(identity, { id: difficulty, score: maximum, settings: { difficulty } }))).ok, true);
     assert.equal((await env.repo.submit(record(identity, { id: `${difficulty}-bad`, score: maximum + 1, settings: { difficulty } }))).ok, false);
   }
   assert.equal(env.remote.documents.get(`weeklyCompetitionClasses_20260914/${identity.classroom.id}`).score, 245);
+});
+
+test('New scoring caps accept variety rewards and reject excess or unknown versions', async () => {
+  const env = setup(), identity = await join(env);
+  for (const [type, difficulty, maximum] of [['proper-add','easy',3250],['all','challenge',10250]]) {
+    const value = record(identity, {id:type,scoringVersion:2,settings:{unit:'g4-addsub',type,difficulty},score:maximum});
+    assert.equal((await env.repo.submit(value)).ok,true);
+    assert.equal((await env.repo.submit({...value,id:type+'-bad',score:maximum+1})).ok,false);
+    assert.equal((await env.repo.submit({...value,id:type+'-unknown',scoringVersion:3})).ok,false);
+  }
 });
 
 test('Invalid or incomplete records never reach the online provider', async () => {

@@ -3,8 +3,8 @@
   'use strict';
   const KEY = 'bunsu.game.v1';
   const RULES = Object.freeze({
-    correct: 10, difficulty: Object.freeze({ easy: 0, normal: 1, challenge: 3 }), firstAttempt: 2,
-    comboThreshold: 3, comboBonusMax: 3, speed: 2, speedRatio: 0.5,
+    correct: 100, difficulty: Object.freeze({ easy: 1, normal: 2, challenge: 3 }), firstAttempt: 50,
+    comboThreshold: 2, comboStep: 100, comboBonusMax: 500, speed: 0, speedRatio: 0.5,
     xpPerCorrect: 5, completionXp: 20, challengeXpPerCorrect: 2, dailyCompletionXp: 5,
     xpPerLevel: 100, journalLimit: 5000,
     classCompletion: 10, classPerFirstCorrect: 5, classAccuracy: 20, classMinimumQuestions: 5
@@ -20,15 +20,27 @@
   const copy = value => JSON.parse(JSON.stringify(value));
   const safeInt = (value, max = Number.MAX_SAFE_INTEGER) => Number.isSafeInteger(value) && value >= 0 && value <= max;
   const add = (a, b) => Math.min(Number.MAX_SAFE_INTEGER, a + b);
+  const TYPE_POINTS = Object.freeze({
+    'g4-addsub': Object.freeze({ 'proper-add':100, 'proper-sub':100, 'one-minus':100, 'improper-add':150, 'mixed-add':200, 'mixed-sub':200, 'whole-minus-mixed':250 }),
+    'g5-equivalence': Object.freeze({ equivalent:100, simplify:150, irreducible:150, 'common-denominator':200, common:250, compare:200 }),
+    'g5-addsub': Object.freeze({ 'proper-add':200, 'proper-sub':200, 'mixed-proper-add':250, 'mixed-proper-sub':250, 'mixed-add':300, 'mixed-sub':300, borrow:300 }),
+    'g5-multiply': Object.freeze({ 'natural-fraction':150, 'fraction-natural':150, 'proper-multiply':200, 'mixed-multiply':300, cancellation:250 }),
+    'g6-divide': Object.freeze({ 'fraction-natural':200, 'natural-fraction':250, 'fraction-fraction':250, 'mixed-divide':300 })
+  });
+  function baseScore({ unit, type, difficulty } = {}) {
+    const points = type === 'all' ? 500 : ['addition', 'subtraction'].includes(type) ? 350 : TYPE_POINTS[unit]?.[type];
+    const multiplier = Object.hasOwn(RULES.difficulty, difficulty) ? RULES.difficulty[difficulty] : 1;
+    return (typeof points === 'number' ? points : RULES.correct) * multiplier;
+  }
+  function maxAnswerScore(settings) { return baseScore(settings) + RULES.firstAttempt + RULES.comboBonusMax; }
   function scoreAnswer(answer = {}) {
     if (!answer.correct || answer.revealed) return { score: 0, combo: 0, bonus: 0 };
-    const difficulty = RULES.difficulty[answer.difficulty] || 0;
+    const base = baseScore(answer);
     const unassisted = answer.firstAttempt === true && !answer.hintUsed && !answer.timedOut;
     const combo = unassisted ? (safeInt(answer.combo, 10000) ? answer.combo : 0) + 1 : 0;
-    const comboBonus = unassisted && combo >= RULES.comboThreshold ? Math.min(RULES.comboBonusMax, combo - RULES.comboThreshold + 1) : 0;
-    const speed = unassisted && answer.timerEnabled && Number.isFinite(answer.remainingRatio) && answer.remainingRatio >= RULES.speedRatio ? RULES.speed : 0;
-    const bonus = difficulty + (unassisted ? RULES.firstAttempt : 0) + comboBonus + speed;
-    return { score: RULES.correct + bonus, combo, bonus };
+    const comboBonus = unassisted && combo >= RULES.comboThreshold ? Math.min(RULES.comboBonusMax, (combo - RULES.comboThreshold + 1) * RULES.comboStep) : 0;
+    const bonus = (unassisted ? RULES.firstAttempt : 0) + comboBonus;
+    return { score: base + bonus, combo, bonus };
   }
   function validRecord(record) {
     return record && typeof record === 'object' && typeof record.id === 'string' && record.id.length > 0 && record.id.length <= 160
@@ -138,7 +150,7 @@
     const saved = persist();
     return { ...saved, expEarned, newBadges: copy(newBadges), profile: profile(), alreadyApplied: false };
   }
-  const api = Object.freeze({ RULES, scoreAnswer, classContribution, profile, applySession, key: KEY });
+  const api = Object.freeze({ RULES, TYPE_POINTS, baseScore, maxAnswerScore, scoreAnswer, classContribution, profile, applySession, key: KEY });
   root.LearningGame = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);

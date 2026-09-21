@@ -245,7 +245,9 @@
     }
     async function submit(record) {
       const identity = identityFrom(record?.competition), weekId = getWeek(clock()).id;
-      const difficulty = record?.settings?.difficulty, max = scoreMax[difficulty];
+      const difficulty = record?.settings?.difficulty;
+      const max = Object.hasOwn(scoreMax, difficulty) && (record.scoringVersion === 2
+        ? root.LearningGame.maxAnswerScore(record.settings) : record.scoringVersion == null ? scoreMax[difficulty] : 0);
       if (!record || record.completed !== true || record.rankingEnabled !== true || record.rankingMode === 'demo' || !identity
         || typeof record.id !== 'string' || !record.id || record.id.length > 160 || !integer(record.total, 200) || record.total < 5
         || !integer(record.correct, record.total) || !integer(record.firstCorrect, record.correct)

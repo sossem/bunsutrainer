@@ -42,15 +42,37 @@ test('Score bonuses require the first unassisted answer; wrong/revealed answers 
   const game = moduleAt('gamification').LearningGame;
   const answer = { correct: true, firstAttempt: true, difficulty: 'challenge', combo: 4,
     timerEnabled: true, remainingRatio: 0.5 };
-  assert.deepEqual(plain(game.scoreAnswer(answer)), { score: 20, combo: 5, bonus: 10 });
+  assert.deepEqual(plain(game.scoreAnswer(answer)), { score: 750, combo: 5, bonus: 450 });
   for (const changed of [{ hintUsed: true }, { timedOut: true }, { firstAttempt: false }]) {
-    assert.deepEqual(plain(game.scoreAnswer({ ...answer, ...changed })), { score: 13, combo: 0, bonus: 3 });
+    assert.deepEqual(plain(game.scoreAnswer({ ...answer, ...changed })), { score: 300, combo: 0, bonus: 0 });
   }
   for (const changed of [{ correct: false }, { revealed: true }]) {
     assert.deepEqual(plain(game.scoreAnswer({ ...answer, ...changed })), { score: 0, combo: 0, bonus: 0 });
   }
-  assert.equal(game.scoreAnswer({ ...answer, remainingRatio: 0.499 }).score, 18);
-  assert.equal(game.scoreAnswer({ ...answer, timerEnabled: false }).score, 18);
+  assert.equal(game.scoreAnswer({ ...answer, remainingRatio: 0.499 }).score, 750);
+  assert.equal(game.scoreAnswer({ ...answer, timerEnabled: false }).score, 750);
+});
+
+test('Every curriculum type has explicit points; variety and difficulty increase rewards', () => {
+  const context = moduleAt('gamification');
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/problem-generator.js'), 'utf8'), context);
+  const game = context.LearningGame;
+  for (const grade of context.ProblemBank.curriculum) for (const unit of grade.units) {
+    for (const type of unit.types) {
+      assert.equal(typeof game.TYPE_POINTS[unit.id][type.id], 'number');
+      const easy = game.baseScore({unit:unit.id,type:type.id,difficulty:'easy'});
+      assert.ok(easy >= 100 && easy <= 300);
+      assert.equal(game.baseScore({unit:unit.id,type:type.id,difficulty:'normal'}), easy * 2);
+      assert.equal(game.baseScore({unit:unit.id,type:type.id,difficulty:'challenge'}), easy * 3);
+      assert.ok(game.baseScore({unit:unit.id,type:'all',difficulty:'easy'}) > easy);
+    }
+  }
+  assert.equal(game.baseScore({unit:'g4-addsub',type:'proper-add',difficulty:'easy'}),100);
+  assert.equal(game.baseScore({unit:'g4-addsub',type:'addition',difficulty:'easy'}),350);
+  assert.equal(game.baseScore({unit:'g4-addsub',type:'all',difficulty:'challenge'}),1500);
+  const reward = game.scoreAnswer({correct:true,firstAttempt:true,type:'all',difficulty:'challenge',combo:99});
+  assert.equal(reward.score,2050);
+  assert.equal(game.maxAnswerScore({type:'all',difficulty:'challenge'}),2050);
 });
 
 test('Class contribution is independent of game score, difficulty and timer bonuses', () => {
