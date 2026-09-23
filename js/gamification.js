@@ -32,15 +32,17 @@
     const multiplier = Object.hasOwn(RULES.difficulty, difficulty) ? RULES.difficulty[difficulty] : 1;
     return (typeof points === 'number' ? points : RULES.correct) * multiplier;
   }
-  function maxAnswerScore(settings) { return baseScore(settings) + RULES.firstAttempt + RULES.comboBonusMax; }
+  function maxAnswerScore(settings, speedEnabled = false) { return baseScore(settings) + RULES.firstAttempt + RULES.comboBonusMax + (speedEnabled ? Math.round(baseScore(settings) * 0.5) : 0); }
   function scoreAnswer(answer = {}) {
     if (!answer.correct || answer.revealed) return { score: 0, combo: 0, bonus: 0 };
     const base = baseScore(answer);
     const unassisted = answer.firstAttempt === true && !answer.hintUsed && !answer.timedOut;
     const combo = unassisted ? (safeInt(answer.combo, 10000) ? answer.combo : 0) + 1 : 0;
     const comboBonus = unassisted && combo >= RULES.comboThreshold ? Math.min(RULES.comboBonusMax, (combo - RULES.comboThreshold + 1) * RULES.comboStep) : 0;
-    const bonus = (unassisted ? RULES.firstAttempt : 0) + comboBonus;
-    return { score: base + bonus, combo, bonus };
+    const speedBonus = unassisted && answer.speedEnabled && Number.isFinite(answer.solveSeconds) && answer.solveSeconds >= 0
+      ? Math.round(base * 0.5 * Math.max(0, 1 - answer.solveSeconds / 60)) : 0;
+    const bonus = (unassisted ? RULES.firstAttempt : 0) + comboBonus + speedBonus;
+    return { score: base + bonus, combo, bonus, ...(answer.speedEnabled ? { speedBonus } : {}) };
   }
   function validRecord(record) {
     return record && typeof record === 'object' && typeof record.id === 'string' && record.id.length > 0 && record.id.length <= 160

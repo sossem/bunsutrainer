@@ -39,8 +39,9 @@ def run():
             b.navigate()
             click("mode", mode)
             if mode == "personal":
-                enter(b)
-            click("grade", grade)
+                enter(b, grade)
+            if mode != "personal":
+                click("grade", grade)
             click("unit", unit)
             if mode == "personal":
                 click("problem-type", kind)

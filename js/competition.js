@@ -40,6 +40,14 @@
   }
   const collections = weekId => ({ classes: `weeklyCompetitionClasses_${weekId}`, players: `weeklyCompetitionPlayers_${weekId}`, receipts: `weeklyCompetitionReceipts_${weekId}` });
   const failure = message => ({ ok: false, message });
+  const validPin = pin => typeof pin === 'string' && /^\d{6}$/.test(pin);
+  async function pinHash(pin, salt) {
+    if (!validPin(pin)) throw new Error('PIN은 숫자 6자리로 입력해 주세요.');
+    if (!root.crypto?.subtle) throw new Error('PIN 보호를 위해 HTTPS 또는 localhost로 접속해 주세요.');
+    const key = await root.crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+    const bits = await root.crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 600000, hash: 'SHA-256' }, key, 256);
+    return Array.from(new Uint8Array(bits), n => n.toString(16).padStart(2, '0')).join('');
+  }
   const expiredMessage = '새 주간이 시작됐어요. 학교와 반을 선택하고 이번 주 닉네임으로 다시 입장해 주세요.';
   function deadline(promise, milliseconds, message) {
     let timer;
@@ -51,7 +59,9 @@
     const clock = options.clock || (() => new Date());
     const assertWeek = weekId => { if (getWeek(clock()).id !== weekId) throw new Error(expiredMessage); };
     return Object.freeze({
-      async register({ identity, draftId }) {
+      async register({ identity, draftId, pin }) {
+        const salt = root.crypto.randomUUID();
+        const credential = { salt, hash: await pinHash(pin, salt) };
         const names = collections(identity.weekId);
         const playerRef = db.collection(names.players).doc(identity.playerId);
         const claimRef = db.collection(names.receipts).doc(`nickname-${draftId}`);
@@ -61,23 +71,31 @@
           if (claim.exists) {
             const saved = identityFrom(claim.data().identity);
             if (!saved || saved.classroom.id !== identity.classroom.id) throw new Error('닉네임 등록 정보를 확인해 주세요.');
+            const existing = await transaction.get(db.collection(names.players).doc(saved.playerId));
+            const protection = existing.data()?.pinCredential;
+            if (!protection || await pinHash(pin, protection.salt) !== protection.hash) throw new Error('등록할 때 사용한 PIN을 입력해 주세요.');
             return { identity: saved, duplicate: true };
           }
           const player = await transaction.get(playerRef);
           if (player.exists) throw new Error('같은 반에서 이미 사용 중인 닉네임이에요. 다른 후보를 선택해 주세요.');
           assertWeek(identity.weekId);
-          transaction.set(playerRef, { ...identity, score: 0, sessions: 0, totalSolved: 0, correctCount: 0, createdAt: new Date(clock()).toISOString(), scoreVersion: 3 });
+          transaction.set(playerRef, { ...identity, pinCredential: credential, score: 0, sessions: 0, totalSolved: 0, correctCount: 0, createdAt: new Date(clock()).toISOString(), scoreVersion: 3 });
           transaction.set(claimRef, { kind: 'nickname', identity, draftId, scoreVersion: 3 });
           return { identity, duplicate: false };
         });
       },
-      async login(identity) {
+      async login(identity, pin) {
         assertWeek(identity.weekId);
         const snapshot = await db.collection(collections(identity.weekId).players).doc(identity.playerId).get();
+        if (!snapshot.exists) return null;
+        const protection = snapshot.data().pinCredential;
+        if (!protection) throw new Error('PIN 도입 전 닉네임이에요. 기존 점수는 보존되며, 새 닉네임과 PIN으로 시작해 주세요.');
+        if (await pinHash(pin, protection.salt) !== protection.hash) throw new Error('닉네임 또는 PIN을 확인해 주세요.');
         assertWeek(identity.weekId);
         return snapshot.exists ? identityFrom(snapshot.data()) : null;
       },
       async contribute(payload) {
+        if (!await this.login(payload.identity, payload.pin)) throw new Error('PIN으로 다시 입장해 주세요.');
         const names = collections(payload.identity.weekId);
         const playerRef = db.collection(names.players).doc(payload.identity.playerId);
         const classRef = db.collection(names.classes).doc(payload.identity.classroom.id);
@@ -144,7 +162,8 @@
     const network = options.onlineProvider || defaultProvider, timeout = options.timeoutMs ?? 8000;
     const schedule = options.setTimeout || setTimeout, cancel = options.clearTimeout || clearTimeout;
     const memory = new Map(), blocked = new Set();
-    let storage, identityEpoch = 0, idCounter = 0;
+    let storage, identityEpoch = 0, idCounter = 0, authenticated = null, sessionPin = null;
+    let failedLogins = 0, retryAfter = 0;
     try { storage = Object.prototype.hasOwnProperty.call(options, 'storage') ? options.storage : root.localStorage; } catch (_) { storage = null; }
     const provider = async () => typeof network === 'function' ? network() : network;
     function read(key, fallback) {
@@ -160,8 +179,9 @@
     }
     const newId = () => options.idFactory ? options.idFactory() : root.crypto?.randomUUID ? root.crypto.randomUUID() : `${new Date(clock()).getTime()}-${Math.floor(random() * 0x100000000).toString(36)}-${++idCounter}-${Math.floor(Math.random() * 0x100000000).toString(36)}`;
     function getSavedIdentity() { return identityFrom(read(KEYS.identity, { version: 1, identity: null }).identity); }
-    function getIdentity() { const value = getSavedIdentity(); return value?.weekId === getWeek(clock()).id ? value : null; }
+    function getIdentity() { getSavedIdentity(); return authenticated?.weekId === getWeek(clock()).id ? copy(authenticated) : null; }
     function clearIdentity() {
+      authenticated = null; sessionPin = null;
       identityEpoch++; memory.delete(KEYS.identity);
       try { if (storage) storage.removeItem(KEYS.identity); } catch (_) { blocked.add(KEYS.identity); }
     }
@@ -211,14 +231,15 @@
       saveDraft(classroom, next);
       return { ok: true, draft: next, message: '새 닉네임을 발급받을 수 있어요. 기존 닉네임의 점수는 그대로 남아요.' };
     }
-    async function registerNickname(value, nickname) {
+    async function registerNickname(value, nickname, pin) {
+      if (!validPin(pin)) return failure('PIN은 숫자 6자리로 입력해 주세요.');
       const classroom = classroomFrom(value), draft = getDraft(classroom), weekId = getWeek(clock()).id;
       if (!classroom || !draft.id || !draft.candidates.includes(nickname) || (draft.confirmed && draft.confirmed !== nickname)) return failure('주사위로 나온 후보 중에서 닉네임을 선택해 주세요.');
       const identity = { weekId, playerId: playerIdFor(classroom, nickname), nickname, classroom };
       try {
         const remote = await deadline(provider(), timeout, '온라인 연결을 확인하지 못했어요. 다시 시도해 주세요.');
         if (getWeek(clock()).id !== weekId) return failure(expiredMessage);
-        const result = await deadline(remote.register({ identity, draftId: draft.id }), timeout, '등록 결과를 아직 확인하지 못했어요. 같은 닉네임으로 다시 확정해 주세요.');
+        const result = await deadline(remote.register({ identity, draftId: draft.id, pin }), timeout, '등록 결과를 아직 확인하지 못했어요. 같은 닉네임과 PIN으로 다시 확정해 주세요.');
         if (getWeek(clock()).id !== weekId) return failure(expiredMessage);
         const registered = identityFrom(result.identity);
         if (!registered || registered.weekId !== weekId || registered.classroom.id !== classroom.id || !draft.candidates.includes(registered.nickname)) return failure('닉네임 등록 결과를 확인해 주세요.');
@@ -227,36 +248,43 @@
         return { ok: true, identity: registered, message: '닉네임을 등록했어요. 이번 주 아이디를 기억하고 입력칸에 적어 입장해 주세요.' };
       } catch (error) { return failure(`닉네임을 등록하지 못했어요. ${error.message || ''}`); }
     }
-    async function login(value, entered) {
-      const epoch = ++identityEpoch, classroom = classroomFrom(value), nickname = clean(entered), weekId = getWeek(clock()).id;
+    async function login(value, entered, pin) {
+      const epoch = ++identityEpoch;
+      authenticated = null; sessionPin = null;
+      if (!validPin(pin)) return failure('PIN은 숫자 6자리로 입력해 주세요.');
+      if (Date.now() < retryAfter) return failure('PIN을 여러 번 틀렸어요. 30초 뒤 다시 시도해 주세요.');
+      const classroom = classroomFrom(value), nickname = clean(entered), weekId = getWeek(clock()).id;
       if (!classroom || !nicknameValid(nickname)) return failure('학교와 반을 확인하고 확정한 닉네임을 정확히 입력해 주세요.');
       const identity = { weekId, playerId: playerIdFor(classroom, nickname), nickname, classroom };
       try {
         const remote = await deadline(provider(), timeout, '온라인 연결을 확인하지 못했어요. 다시 시도해 주세요.');
         if (epoch !== identityEpoch) return failure('입장 정보가 바뀌었어요. 다시 입장해 주세요.');
         if (getWeek(clock()).id !== weekId) return failure(expiredMessage);
-        const registered = identityFrom(await deadline(remote.login(identity), timeout, '닉네임 확인 시간이 초과됐어요. 다시 입장해 주세요.'));
+        const registered = identityFrom(await deadline(remote.login(identity, pin), timeout, '닉네임 확인 시간이 초과됐어요. 다시 입장해 주세요.'));
         if (epoch !== identityEpoch) return failure('입장 정보가 바뀌었어요. 다시 입장해 주세요.');
         if (getWeek(clock()).id !== weekId) return failure(expiredMessage);
         if (!registered || registered.playerId !== identity.playerId || registered.weekId !== weekId) return failure('이번 주에 등록된 닉네임을 찾지 못했어요. 학교, 반과 닉네임을 확인해 주세요.');
         write(KEYS.identity, { version: 1, identity: registered });
+        authenticated = registered; sessionPin = pin; failedLogins = 0;
         return { ok: true, identity: registered, message: `${nickname}, 전국학급랭킹전에 입장했어요.` };
-      } catch (error) { return failure(`입장하지 못했어요. ${error.message || ''}`); }
+      } catch (error) { if (++failedLogins >= 5) { retryAfter = Date.now() + 30000; failedLogins = 0; } return failure(`입장하지 못했어요. ${error.message || ''}`); }
     }
     async function submit(record) {
       const identity = identityFrom(record?.competition), weekId = getWeek(clock()).id;
       const difficulty = record?.settings?.difficulty;
-      const max = Object.hasOwn(scoreMax, difficulty) && (record.scoringVersion === 2
-        ? root.LearningGame.maxAnswerScore(record.settings) : record.scoringVersion == null ? scoreMax[difficulty] : 0);
+      const max = Object.hasOwn(scoreMax, difficulty) && ([2, 3].includes(record.scoringVersion)
+        ? root.LearningGame.maxAnswerScore(record.settings, record.scoringVersion === 3) : record.scoringVersion == null ? scoreMax[difficulty] : 0);
       if (!record || record.completed !== true || record.rankingEnabled !== true || record.rankingMode === 'demo' || !identity
         || typeof record.id !== 'string' || !record.id || record.id.length > 160 || !integer(record.total, 200) || record.total < 5
         || !integer(record.correct, record.total) || !integer(record.firstCorrect, record.correct)
         || !max || !integer(record.score, record.total * max) || typeof record.date !== 'string' || !Number.isFinite(Date.parse(record.date))) return failure('5문제 이상을 끝까지 마친 이번 주 랭킹전 학습만 반영할 수 있어요.');
       if (identity.weekId !== weekId || getWeek(record.date).id !== weekId) return failure(expiredMessage);
+      if (getIdentity()?.playerId !== identity.playerId) return failure('이 기록의 닉네임과 PIN으로 다시 입장한 뒤 반영해 주세요.');
+      if ((record.scoringVersion === 3 || record.settings.grade != null) && record.settings.grade !== identity.classroom.grade) return failure('우리 반 학년의 문제만 랭킹에 반영할 수 있어요.');
       try {
         const remote = await deadline(provider(), timeout, '온라인 연결을 확인하지 못했어요. 기록에서 다시 시도할 수 있어요.');
         if (getWeek(clock()).id !== weekId) return failure(expiredMessage);
-        const result = await deadline(remote.contribute({ identity, sessionId: record.id, score: record.score, total: record.total, firstCorrect: record.firstCorrect, date: record.date, difficulty }), timeout,
+        const result = await deadline(remote.contribute({ identity, pin: sessionPin, sessionId: record.id, score: record.score, total: record.total, firstCorrect: record.firstCorrect, date: record.date, difficulty }), timeout,
           '반영 결과를 아직 확인하지 못했어요. 기록에서 다시 시도해도 점수는 한 번만 반영돼요.');
         return { ok: true, duplicate: result.duplicate === true, message: result.duplicate ? '이미 학급과 개인 점수에 반영한 학습이에요.' : `학급과 개인 주간 점수에 각각 ${record.score}점을 더했어요.` };
       } catch (error) { return failure(`온라인 점수 반영 결과를 확인하지 못했어요. 기록에서 다시 시도할 수 있어요. ${error.message || ''}`); }

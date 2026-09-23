@@ -32,7 +32,7 @@
       classScoreContribution: nonnegative,
       classContributionStatus: (value) => ['pending', 'synced', 'failed', 'demo', 'not-joined'].includes(value),
       gameVersion: (value) => value === 1,
-      scoringVersion: (value) => value === 2
+      scoringVersion: (value) => value === 2 || value === 3
     };
     for (const [key, validate] of Object.entries(validators)) {
       try {

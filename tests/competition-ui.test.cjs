@@ -74,7 +74,7 @@ test('Entry opens with or without a saved class and preserves a confirmed nickna
 });
 
 test('Dice stops at ten rolls and a previously rolled candidate can be registered', async () => {
-  const f = fixture(); f.ui.openEntry();
+  const f = fixture(); f.ui.openEntry(); f.ui.input({target:{id:'competition-pin',value:'123456'}}); f.ui.input({target:{id:'competition-pin-confirm',value:'123456'}});
   for (let i = 0; i < 11; i++) f.ui.action('competition-roll');
   assert.equal(f.draft().rolls, 10);
   f.ui.action('competition-candidate', '2'); f.ui.action('competition-confirm'); await tick();
@@ -87,7 +87,7 @@ test('Dice stops at ten rolls and a previously rolled candidate can be registere
 
 test('Duplicate confirmation and entry clicks make only one request while busy', async () => {
   const registration = deferred(), login = deferred();
-  const f = fixture({ register: registration.promise, login: login.promise }); f.ui.openEntry();
+  const f = fixture({ register: registration.promise, login: login.promise }); f.ui.openEntry(); f.ui.input({target:{id:'competition-pin',value:'123456'}}); f.ui.input({target:{id:'competition-pin-confirm',value:'123456'}});
   f.ui.action('competition-roll'); f.ui.action('competition-confirm'); f.ui.action('competition-confirm'); await tick();
   assert.equal(f.calls.register, 1);
   registration.resolve({ ok: true, identity: { nickname: '공부하는토끼1' } }); await tick();
@@ -98,7 +98,7 @@ test('Duplicate confirmation and entry clicks make only one request while busy',
 });
 
 test('Input stays intact across rerenders and existing nicknames can enter directly', async () => {
-  const f = fixture(); f.ui.openEntry();
+  const f = fixture(); f.ui.openEntry(); f.ui.input({target:{id:'competition-pin',value:'123456'}}); f.ui.input({target:{id:'competition-pin-confirm',value:'123456'}});
   f.ui.input({ target: { id: 'competition-school-query', value: '서울 배움' } });
   f.ui.input({ target: { id: 'competition-nickname', value: '노래하는나무' } });
   f.ui.action('competition-roll');
@@ -110,7 +110,7 @@ test('Input stays intact across rerenders and existing nicknames can enter direc
 });
 
 test('School search rejects a short query, deduplicates requests, and discards late results', async () => {
-  const search = deferred(), f = fixture({ search: search.promise }); f.ui.openEntry();
+  const search = deferred(), f = fixture({ search: search.promise }); f.ui.openEntry(); f.ui.input({target:{id:'competition-pin',value:'123456'}}); f.ui.input({target:{id:'competition-pin-confirm',value:'123456'}});
   f.ui.action('competition-search');
   assert.match(f.ui.entryHtml(), /두 글자 이상 입력/); assert.equal(f.calls.search, 0);
   f.ui.input({ target: { id: 'competition-school-query', value: '배움' } });
@@ -121,7 +121,7 @@ test('School search rejects a short query, deduplicates requests, and discards l
 });
 
 test('Class edits invalidate pending registration without restoring the old nickname', async () => {
-  const registration = deferred(), f = fixture({ register: registration.promise }); f.ui.openEntry();
+  const registration = deferred(), f = fixture({ register: registration.promise }); f.ui.openEntry(); f.ui.input({target:{id:'competition-pin',value:'123456'}}); f.ui.input({target:{id:'competition-pin-confirm',value:'123456'}});
   f.ui.action('competition-roll'); f.ui.action('competition-confirm'); await tick();
   f.ui.change({ target: { value: '5', dataset: { competitionField: 'grade' } } });
   registration.resolve({ ok: true, identity: { nickname: '공부하는토끼1' } }); await tick();
@@ -132,7 +132,7 @@ test('Class edits invalidate pending registration without restoring the old nick
 
 test('A pending login cannot enter after leaving or crossing a week boundary', async () => {
   for (const transition of ['leave', 'week']) {
-    const login = deferred(), f = fixture({ login: login.promise }); f.ui.openEntry();
+    const login = deferred(), f = fixture({ login: login.promise }); f.ui.openEntry(); f.ui.input({target:{id:'competition-pin',value:'123456'}}); f.ui.input({target:{id:'competition-pin-confirm',value:'123456'}});
     f.ui.input({ target: { id: 'competition-nickname', value: '공부하는토끼' } });
     f.ui.action('competition-enter'); await tick();
     if (transition === 'leave') f.ui.leave(); else { f.nextWeek(); f.fireTimer(); }
@@ -144,7 +144,7 @@ test('A pending login cannot enter after leaving or crossing a week boundary', a
 
 test('Nickname errors are displayed and retry is available', async () => {
   const f = fixture({ login: Promise.resolve({ ok: false, message: '등록한 닉네임을 찾을 수 없어요.' }) });
-  f.ui.openEntry(); f.ui.input({ target: { id: 'competition-nickname', value: '없는닉네임' } });
+  f.ui.openEntry(); f.ui.input({target:{id:'competition-pin',value:'123456'}}); f.ui.input({target:{id:'competition-pin-confirm',value:'123456'}}); f.ui.input({ target: { id: 'competition-nickname', value: '없는닉네임' } });
   f.ui.action('competition-enter'); await tick();
   assert.match(f.ui.entryHtml(), /등록한 닉네임을 찾을 수 없어요/);
   assert.doesNotMatch(f.ui.entryHtml(), /입장 중…/);
@@ -171,7 +171,7 @@ test('Board rollover replaces both subscriptions and keeps a single timer', () =
   f.nextWeek(); f.fireTimer();
   assert.equal(f.watchers.length, 4); assert.equal(f.watchers.filter(value => value.active).length, 2);
   assert.equal(f.timers.size, 1); assert.match(f.ui.boardHtml(), /2026\.09\.21/);
-  f.ui.openEntry(); assert.equal(f.timers.size, 1); assert.equal(f.watchers.filter(value => value.active).length, 0);
+  f.ui.openEntry(); f.ui.input({target:{id:'competition-pin',value:'123456'}}); f.ui.input({target:{id:'competition-pin-confirm',value:'123456'}}); assert.equal(f.timers.size, 1); assert.equal(f.watchers.filter(value => value.active).length, 0);
   f.ui.destroy(); assert.equal(f.timers.size, 0);
 });
 
@@ -191,4 +191,18 @@ test('A failed realtime subscription displays its error and refresh replaces old
   f.ui.action('competition-refresh');
   assert.equal(f.watchers.filter(value => value.active).length, 2);
   assert.doesNotMatch(f.ui.boardHtml(), /서버에 연결할 수 없어요/);
+});
+
+test('Both weekly ranking kinds render accessible gold, silver and bronze medals', () => {
+  const f = fixture(); f.ui.openBoard();
+  for (const kind of ['class', 'individual']) {
+    f.ui.action('competition-kind', kind);
+    const current = f.watchers.filter(w => w.active && w.week === 'current')[0];
+    current.onData({ rows: [1,2,3,4].map(n => ({ ...classroom, id: String(n), classroom, nickname: `학생${n}`, score: 100-n })) });
+    const html = f.ui.boardHtml();
+    for (const [index, medal] of ['🥇','🥈','🥉'].entries()) {
+      assert.ok(html.includes(`aria-label="${index+1}위">${medal}`));
+    }
+    assert.ok(html.includes('competition-position">4</span>'));
+  }
 });

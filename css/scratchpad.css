@@ -1,0 +1,27 @@
+.scratch-layout { position: relative; min-width: 0; min-height: 0; }
+.scratch-panel { color: #183c36; }
+.scratch-toggle { display: block; margin: 8px 0 8px auto; }
+.scratch-panel [hidden] { display: none; }
+#scratch-content { border: 1px solid #dce4de; border-radius: 16px; background: #fff; padding: 12px; }
+.scratch-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.scratch-tools .btn { min-height: 44px; }
+.scratch-tools [aria-pressed="true"] { background: #e5f0eb; border-color: #226f60; }
+.scratch-panel canvas { display: block; width: 100%; height: 360px; touch-action: none; border: 1px solid #e5ebe7; border-radius: 8px; background: repeating-linear-gradient(#fff 0 31px, #edf2ef 31px 32px); }
+.scratch-panel small { display: block; font-size: 13px; margin-top: 8px; }
+.rank-medal { display: inline-block; font-size: 32px; line-height: 1.3; filter: drop-shadow(0 2px 2px #0002); }
+.classroom-shell > .scratch-layout { height: 100%; }
+.classroom-shell .scratch-layout > .classroom-stage { height: 100%; }
+.classroom-shell .scratch-panel { position: absolute; right: 0; top: 0; }
+.classroom-shell .scratch-open { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; }
+.classroom-shell .scratch-open .scratch-panel { position: static; min-height: 0; display: flex; flex-direction: column; }
+.classroom-shell #scratch-content { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.classroom-shell #scratch-content[hidden] { display: none; }
+.classroom-shell .scratch-panel canvas { flex: 1; min-height: 0; height: 0; }
+@media (min-width: 1200px) {
+  .study-wrap:has(.scratch-open) { width: min(1360px, calc(100% - 64px)); }
+  .study-wrap .scratch-open { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+}
+@media (max-width: 1199px) {
+  .classroom-shell .scratch-open { display: block; }
+  .classroom-shell .scratch-open .scratch-panel { position: absolute; z-index: 5; right: 0; top: 0; bottom: 0; width: min(340px, 90vw); background: #f7f8f5; box-shadow: 0 8px 24px #183c3633; border-radius: 16px; }
+}

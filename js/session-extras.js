@@ -65,9 +65,9 @@
       s.settings.rankingEnabled = !!s.competition;
       s.settings.gamificationEnabled = s.mode === 'personal' && !s.isReview;
       if (s.mode === 'personal') { s.settings.timerSeconds = 0; s.settings.autoReveal = false; }
-      s.questionStartedAt = performance.now();
+      s.questionStartedAt = performance.now(); s.questionStarts = { 0: s.questionStartedAt };
     }
-    function moved() { pendingReward = null; state.session.questionStartedAt = performance.now(); }
+    function moved() { pendingReward = null; const s = state.session; s.questionStarts ||= {}; s.questionStartedAt = s.competition ? (s.questionStarts[s.index] ??= performance.now()) : performance.now(); }
     function submitted(a, result) {
       if (result.valid === false || result.code === 'invalid-input' || a.score !== undefined) return;
       const s = state.session, time = timer()?.snapshot();
@@ -76,7 +76,7 @@
         a.solveSeconds = Math.max(0, (performance.now() - s.questionStartedAt) / 1000);
         const reward = Game.scoreAnswer({ correct: true, firstAttempt: a.firstCorrect,
           hintUsed: a.hintUsed, revealed: a.revealed, timedOut: a.timedOut,
-          unit: s.settings.unit, type: s.settings.type, difficulty: s.settings.difficulty, combo: s.combo,
+          speedEnabled: !!s.competition, solveSeconds: a.solveSeconds, unit: s.settings.unit, type: s.settings.type, difficulty: s.settings.difficulty, combo: s.combo,
           timerEnabled: !!time?.enabled && !a.timerReset, remainingRatio: time ? 1 - time.elapsedSeconds / time.seconds : 0 });
         if (s.settings.gamificationEnabled) {
           a.score = reward.score; s.score += reward.score; s.combo = reward.combo;
@@ -98,7 +98,7 @@
       const s = state.session;
       if (!s.settings.gamificationEnabled || s.isReview) return '';
       const reward = pendingReward; pendingReward = null;
-      return `<div class="session-growth" role="status"><strong>이번 도전 ${s.score}점</strong><span>연속 정답 ${s.combo}개</span>${answer().score ? `<span>이번 문제 +${answer().score}점</span>` : ''}</div>${reward ? `<div class="score-burst" aria-hidden="true">${sparkles()}<span>${reward.combo >= 2 ? `${reward.combo}연속 정답!` : '정답! 멋지게 해냈어요!'}</span><strong>+${reward.score}점</strong><small>${reward.bonus ? `보너스 ${reward.bonus}점 포함` : '다시 도전해서 해냈어요!'}</small></div>` : ''}`;
+      return `<div class="session-growth" role="status"><strong>이번 도전 ${s.score}점</strong><span>연속 정답 ${s.combo}개</span>${answer().score ? `<span>이번 문제 +${answer().score}점</span>` : ''}</div>${reward ? `<div class="score-burst" aria-hidden="true">${sparkles()}<span>${reward.combo >= 2 ? `${reward.combo}연속 정답!` : '정답! 멋지게 해냈어요!'}</span><strong>+${reward.score}점</strong><small>${reward.bonus ? `보너스 ${reward.bonus}점 포함${reward.speedBonus ? ` · 속도 +${reward.speedBonus}점` : ''}` : '다시 도전해서 해냈어요!'}</small></div>` : ''}`;
     }
     function sparkles() { return `<div class="score-sparkles" aria-hidden="true">${Array.from({length:12}, (_, i) => `<i style="--i:${i}"></i>`).join('')}</div>`; }
     function celebrationHtml(r) {
@@ -111,7 +111,7 @@
     function complete(record, atEnd) {
       const s = state.session;
       record.completed = atEnd && s.responses.every(a => a.attempts.length > 0 || a.revealed);
-      Object.assign(record, { gameVersion: 1, scoringVersion: 2, gamificationEnabled: !!s.settings.gamificationEnabled,
+      Object.assign(record, { gameVersion: 1, scoringVersion: 3, gamificationEnabled: !!s.settings.gamificationEnabled,
         score: s.score, comboMax: s.comboMax, timerEnabled: !!s.settings.timerSeconds,
         timerSeconds: s.settings.timerSeconds, timeoutCount: s.responses.filter(a => a.timedOut).length,
         averageSolveSeconds: s.responses.filter(a => a.correct).reduce((sum, a) => sum + (a.solveSeconds || 0), 0) / Math.max(1, record.correct),

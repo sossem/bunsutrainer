@@ -57,7 +57,7 @@
     }
     function row(value, position, selection) {
       const ours = selection?.id === value.id;
-      return `<tr${ours ? ' class="ranking-ours"' : ''}><td>${position == null ? '목록 밖' : number(position)}</td><th scope="row"><strong>${E(classLabel(value))}</strong><small>${E(value.region)}${ours ? ' · 우리 반' : ''}</small></th><td class="ranking-score">${number(value.score)}</td><td>${number(value.sessions)}</td></tr>`;
+      return `<tr${ours ? ' class="ranking-ours"' : ''}><td>${position == null ? '목록 밖' : position <= 3 ? `<span class="rank-medal" role="img" aria-label="${position}위">${['🥇','🥈','🥉'][position-1]}</span>` : number(position)}</td><th scope="row"><strong>${E(classLabel(value))}</strong><small>${E(value.region)}${ours ? ' · 우리 반' : ''}</small></th><td class="ranking-score">${number(value.score)}</td><td>${number(value.sessions)}</td></tr>`;
     }
     function list(selection) {
       if (state.status === 'loading') return '<div class="ranking-empty" role="status"><h3>랭킹을 불러오고 있어요</h3><p>잠시만 기다려 주세요.</p></div>';

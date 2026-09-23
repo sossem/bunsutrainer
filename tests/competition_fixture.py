@@ -14,7 +14,7 @@ def field(browser, selector, value, event='change'):
                  + ',{bubbles:true}));})()')
 
 
-def enter(browser):
+def enter(browser, grade=4):
     """Called after opening the personal mode; reused nicknames still require login."""
     if not browser.eval('!!ClassRanking.getSelection()'):
         field(browser, '#competition-school-query', '서울', 'input')
@@ -22,9 +22,15 @@ def enter(browser):
         browser.wait('[data-action="competition-school-pick"]')
         browser.click('[data-action="competition-school-pick"][data-value="0"]')
         browser.click('[data-action="competition-class-select"]')
+    if browser.eval('ClassRanking.getSelection().grade') != grade:
+        field(browser, '#competition-grade', grade)
+        browser.click('[data-action="competition-class-select"]')
     if not browser.eval('!!WeeklyCompetition.getDraft(ClassRanking.getSelection()).confirmed'):
         browser.click('[data-action="competition-roll"]')
+        field(browser, '#competition-pin', '123456', 'input')
+        field(browser, '#competition-pin-confirm', '123456', 'input')
         browser.click('[data-action="competition-confirm"]')
         browser.wait_for('!!WeeklyCompetition.getDraft(ClassRanking.getSelection()).confirmed')
+    field(browser, '#competition-pin', '123456', 'input')
     browser.click('[data-action="competition-enter"]')
     browser.wait('.competition-setup')

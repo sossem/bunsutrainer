@@ -12,7 +12,7 @@ function localStorage(initial = {}) {
   return { values, getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
 }
 function moduleAt(context = {}) {
-  const sandbox = vm.createContext({ setTimeout, clearTimeout, ...context });
+  const sandbox = vm.createContext({ setTimeout, clearTimeout, crypto: require("node:crypto").webcrypto, TextEncoder, ...context });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/gamification.js'), 'utf8'), sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/competition.js'), 'utf8'), sandbox);
   return sandbox.WeeklyCompetition;
@@ -68,15 +68,43 @@ function setup(options = {}) {
 }
 async function join(env, selectedClass = classroom) {
   const nickname = env.repo.rollNickname(selectedClass).draft.selected;
-  const registration = await env.repo.registerNickname(selectedClass, nickname);
+  const registration = await env.repo.registerNickname(selectedClass, nickname, '123456');
   assert.equal(registration.ok, true, registration.message);
-  const result = await env.repo.login(selectedClass, nickname);
+  const result = await env.repo.login(selectedClass, nickname, '123456');
   assert.equal(result.ok, true, result.message);
   return result.identity;
 }
 const record = (identity, changes = {}) => ({ id: 'session-1', competition: identity, completed: true, rankingEnabled: true,
   date: now, score: 65, total: 5, correct: 5, firstCorrect: 5, settings: { difficulty: 'normal' }, ...changes });
 const flush = () => new Promise(resolve => setImmediate(resolve));
+
+test('PIN rejects impersonation, is salted, never persists plaintext, and old accounts remain untouched', async () => {
+  const env = setup(), identity = await join(env);
+  const path = `weeklyCompetitionPlayers_20260914/${identity.playerId}`;
+  const saved = env.remote.documents.get(path);
+  assert.equal(saved.pinCredential.hash.length, 64);
+  assert.ok(saved.pinCredential.salt);
+  assert.ok(!JSON.stringify([...env.remote.documents]).includes('123456'));
+  assert.ok(!JSON.stringify([...env.local.values]).includes('123456'));
+  assert.equal((await env.repo.login(classroom, identity.nickname, '000000')).ok, false);
+  assert.equal(env.repo.getIdentity(), null);
+  assert.equal((await env.repo.submit(record(identity))).ok, false);
+  assert.equal((await env.repo.login(classroom, identity.nickname, '123456')).ok, true);
+  assert.equal((await env.repo.submit(record(identity, { settings: { grade: 4, difficulty: 'normal' } }))).ok, false);
+  delete saved.pinCredential;
+  const before = JSON.stringify(saved);
+  assert.equal((await env.repo.login(classroom, identity.nickname, '123456')).ok, false);
+  assert.equal(JSON.stringify(env.remote.documents.get(path)), before);
+});
+
+test('Speed score version permits its bounded bonus and retains version 2 limits', async () => {
+  const env = setup(), identity = await join(env);
+  const settings = { grade: 5, unit: 'g5-addsub', type: 'proper-add', difficulty: 'normal' };
+  const value = record(identity, { scoringVersion: 3, settings, score: 5 * (400 + 50 + 500 + 200) });
+  assert.equal((await env.repo.submit(value)).ok, true);
+  assert.equal((await env.repo.submit({ ...value, id: 'over', score: value.score + 1 })).ok, false);
+  assert.equal((await env.repo.submit({ ...value, id: 'old-cap', scoringVersion: 2 })).ok, false);
+});
 
 test('Competition import has no network or storage mutation side effects', () => {
   let requests = 0;
@@ -112,17 +140,18 @@ test('Ten unique dice candidates persist across reload and an unconfirmed draft 
 
 test('Registration uses a transaction, requires a dice candidate, and becomes identity only after login', async () => {
   const env = setup();
-  assert.equal((await env.repo.registerNickname(classroom, '공부하는고양이')).ok, false);
+  assert.equal((await env.repo.registerNickname(classroom, '공부하는고양이', '123456')).ok, false);
   const nick = env.repo.rollNickname(classroom).draft.selected;
-  assert.equal((await env.repo.login(classroom, nick)).ok, false);
-  assert.equal((await env.repo.registerNickname(classroom, nick)).ok, true);
+  assert.equal((await env.repo.login(classroom, nick, '123456')).ok, false);
+  assert.equal((await env.repo.registerNickname(classroom, nick, '123456')).ok, true);
   assert.equal(env.repo.getIdentity(), null);
   assert.equal(env.repo.getDraft(classroom).confirmed, nick);
   assert.equal(env.repo.rollNickname(classroom).ok, false);
-  assert.equal((await env.repo.login({ ...classroom, className: '3' }, nick)).ok, false);
-  assert.equal((await env.repo.login(classroom, ` ${nick} `)).ok, true);
+  assert.equal((await env.repo.login({ ...classroom, className: '3' }, nick, '123456')).ok, false);
+  assert.equal((await env.repo.login(classroom, ` ${nick} `, '123456')).ok, true);
   const reloaded = env.api.createRepository({ clock: env.clock, storage: env.local });
-  assert.deepEqual(plain(reloaded.getIdentity()), plain(env.repo.getIdentity()));
+  assert.equal(reloaded.getIdentity(), null, 'Reload requires PIN verification');
+  assert.deepEqual(plain(reloaded.getSavedIdentity()), plain(env.repo.getIdentity()));
   assert.equal(env.remote.documents.size, 2, 'One player and one registration receipt');
 });
 
@@ -131,11 +160,11 @@ test('Same-class nickname collisions fail while a different class may use the sa
   const other = env.api.createRepository({ clock: env.clock, storage: localStorage(), random: () => 0, idFactory: () => 'other-draft', onlineProvider: env.provider });
   const nick = other.rollNickname(classroom).draft.selected;
   assert.equal(nick, first.nickname);
-  assert.equal((await other.registerNickname(classroom, nick)).ok, false);
+  assert.equal((await other.registerNickname(classroom, nick, '123456')).ok, false);
   const otherClass = { ...classroom, className: '3' };
   assert.equal(other.rollNickname(otherClass).ok, true);
-  assert.equal((await other.registerNickname(otherClass, nick)).ok, true);
-  assert.equal((await other.login(otherClass, nick)).ok, true);
+  assert.equal((await other.registerNickname(otherClass, nick, '123456')).ok, true);
+  assert.equal((await other.login(otherClass, nick, '123456')).ok, true);
   assert.notEqual(other.getIdentity().playerId, first.playerId);
 });
 
@@ -143,11 +172,11 @@ test('Concurrent confirmations from one draft register exactly one nickname and 
   const env = setup();
   env.repo.rollNickname(classroom); env.repo.rollNickname(classroom);
   const [a, b] = env.repo.getDraft(classroom).candidates;
-  const responses = await Promise.all([env.repo.registerNickname(classroom, a), env.repo.registerNickname(classroom, b)]);
+  const responses = await Promise.all([env.repo.registerNickname(classroom, a, '123456'), env.repo.registerNickname(classroom, b, '123456')]);
   assert.ok(responses.every(response => response.ok));
   assert.equal(responses[0].identity.nickname, responses[1].identity.nickname);
   assert.equal(env.remote.documents.size, 2);
-  assert.equal((await env.repo.registerNickname(classroom, a)).ok, true);
+  assert.equal((await env.repo.registerNickname(classroom, responses[0].identity.nickname, '123456')).ok, true);
 });
 
 test('A confirmed forgotten nickname allows a fresh ten-roll draft without deleting previous score', async () => {
@@ -158,7 +187,7 @@ test('A confirmed forgotten nickname allows a fresh ten-roll draft without delet
   env.repo.rollNickname(classroom);
   const nextNick = env.repo.rollNickname(classroom).draft.selected;
   assert.notEqual(nextNick, identity.nickname);
-  assert.equal((await env.repo.registerNickname(classroom, nextNick)).ok, true);
+  assert.equal((await env.repo.registerNickname(classroom, nextNick, '123456')).ok, true);
   assert.equal(env.remote.documents.get(`weeklyCompetitionPlayers_20260914/${identity.playerId}`).score, 65);
   assert.equal(env.repo.getIdentity().nickname, identity.nickname, 'New registration alone does not log in');
 });
@@ -190,7 +219,7 @@ test('New scoring caps accept variety rewards and reject excess or unknown versi
     const value = record(identity, {id:type,scoringVersion:2,settings:{unit:'g4-addsub',type,difficulty},score:maximum});
     assert.equal((await env.repo.submit(value)).ok,true);
     assert.equal((await env.repo.submit({...value,id:type+'-bad',score:maximum+1})).ok,false);
-    assert.equal((await env.repo.submit({...value,id:type+'-unknown',scoringVersion:3})).ok,false);
+    assert.equal((await env.repo.submit({...value,id:type+'-unknown',scoringVersion:99})).ok,false);
   }
 });
 
@@ -212,7 +241,7 @@ test('Rollover expires identity and old session contributions, leaving last week
   assert.equal(env.repo.getSavedIdentity().nickname, identity.nickname);
   assert.equal(env.repo.getDraft(classroom).rolls, 0);
   assert.equal((await env.repo.submit(record(identity, { id: 'late' }))).ok, false);
-  assert.equal((await env.repo.login(classroom, identity.nickname)).ok, false);
+  assert.equal((await env.repo.login(classroom, identity.nickname, '123456')).ok, false);
   assert.deepEqual(plain([...env.remote.documents.entries()]), previous);
   const newIdentity = await join(env);
   assert.equal(newIdentity.weekId, '20260921');
@@ -223,6 +252,7 @@ test('Provider acquisition or a Firestore retry crossing Monday 08:00 cannot wri
   const env = setup(), identity = await join(env);
   const repo = env.api.createRepository({ clock: env.clock, storage: localStorage(), async onlineProvider() { env.setTime(nextWeek); return env.provider; } });
   const before = env.remote.documents.size;
+  await repo.login(classroom, identity.nickname, '123456');
   assert.equal((await repo.submit(record(identity))).ok, false);
   assert.equal(env.remote.documents.size, before);
   await assert.rejects(env.provider.contribute({ identity, sessionId: 'direct', score: 10, total: 5, firstCorrect: 1, difficulty: 'easy', date: now }), /새 주간/);
@@ -248,22 +278,25 @@ test('Transaction overflow leaves both class and individual rows untouched', asy
 
 test('Lost registration response is retryable without a second nickname registration', async () => {
   const env = setup(); let first = true;
-  const repo = env.api.createRepository({ clock: env.clock, storage: env.local, random: () => 0, idFactory: () => 'lost-registration', timeoutMs: 5, onlineProvider: {
-    ...env.provider, async register(payload) { const saved = await env.provider.register(payload); if (first) { first = false; await new Promise(resolve => setTimeout(resolve, 20)); } return saved; }
+  const repo = env.api.createRepository({ clock: env.clock, storage: env.local, random: () => 0, idFactory: () => 'lost-registration', timeoutMs: 1000, onlineProvider: {
+    ...env.provider, async register(payload) { const saved = await env.provider.register(payload); if (first) { first = false; await new Promise(resolve => setTimeout(resolve, 1500)); } return saved; }
   } });
   const nick = repo.rollNickname(classroom).draft.selected;
-  assert.equal((await repo.registerNickname(classroom, nick)).ok, false);
-  assert.equal((await repo.registerNickname(classroom, nick)).ok, true);
+  assert.equal((await repo.registerNickname(classroom, nick, '123456')).ok, false);
+  await new Promise(resolve => setTimeout(resolve, 1700));
+  assert.equal((await repo.registerNickname(classroom, nick, '123456')).ok, true);
   assert.equal(env.remote.documents.size, 2);
   assert.equal(repo.getIdentity(), null);
 });
 
 test('Lost contribution response and retry still award only once', async () => {
   const env = setup(), identity = await join(env); let first = true;
-  const repo = env.api.createRepository({ clock: env.clock, storage: env.local, timeoutMs: 5, onlineProvider: {
-    ...env.provider, async contribute(payload) { const saved = await env.provider.contribute(payload); if (first) { first = false; await new Promise(resolve => setTimeout(resolve, 20)); } return saved; }
+  const repo = env.api.createRepository({ clock: env.clock, storage: env.local, timeoutMs: 1000, onlineProvider: {
+    ...env.provider, async contribute(payload) { const saved = await env.provider.contribute(payload); if (first) { first = false; await new Promise(resolve => setTimeout(resolve, 1500)); } return saved; }
   } });
+  await repo.login(classroom, identity.nickname, '123456');
   assert.equal((await repo.submit(record(identity))).ok, false);
+  await new Promise(resolve => setTimeout(resolve, 1700));
   const retried = await repo.submit(record(identity));
   assert.equal(retried.ok, true); assert.equal(retried.duplicate, true);
   assert.equal(env.remote.documents.get(`weeklyCompetitionClasses_20260914/${identity.classroom.id}`).score, 65);
@@ -274,11 +307,12 @@ test('Pending login cancellation preserves previous identity and stops late iden
   const repo = env.api.createRepository({ clock: env.clock, storage: env.local, onlineProvider: {
     ...env.provider, login(value) { return new Promise(resolve => { release = () => resolve(value); }); }
   } });
-  const pending = repo.login(classroom, identity.nickname);
+  const pending = repo.login(classroom, identity.nickname, '123456');
   await flush(); repo.cancelPendingLogin(); release();
   assert.equal((await pending).ok, false);
-  assert.equal(repo.getIdentity().nickname, identity.nickname);
-  const next = repo.login(classroom, identity.nickname);
+  assert.equal(repo.getIdentity(), null);
+  assert.equal(repo.getSavedIdentity().nickname, identity.nickname);
+  const next = repo.login(classroom, identity.nickname, '123456');
   await flush(); repo.clearIdentity(); release();
   assert.equal((await next).ok, false);
   assert.equal(repo.getIdentity(), null);
@@ -287,7 +321,7 @@ test('Pending login cancellation preserves previous identity and stops late iden
 test('A login response arriving in a new week never creates an active stale identity', async () => {
   const env = setup(), identity = await join(env);
   const repo = env.api.createRepository({ clock: env.clock, storage: localStorage(), onlineProvider: { ...env.provider, async login() { env.setTime(nextWeek); return identity; } } });
-  assert.equal((await repo.login(classroom, identity.nickname)).ok, false);
+  assert.equal((await repo.login(classroom, identity.nickname, '123456')).ok, false);
   assert.equal(repo.getSavedIdentity(), null);
 });
 
@@ -315,8 +349,8 @@ test('Invalid classroom and forged nicknames are rejected before registration or
   for (const changed of [{ schoolName: 'bad/path' }, { region: '' }, { grade: 3 }, { className: '31' }, { className: '1.5' }]) {
     assert.equal(env.repo.rollNickname({ ...classroom, ...changed }).ok, false);
   }
-  assert.equal((await env.repo.login(classroom, '<script>')).ok, false);
-  assert.equal((await env.repo.registerNickname(classroom, '__proto__')).ok, false);
+  assert.equal((await env.repo.login(classroom, '<script>', '123456')).ok, false);
+  assert.equal((await env.repo.registerNickname(classroom, '__proto__', '123456')).ok, false);
   assert.equal(env.remote.operations.length, 0);
 });
 

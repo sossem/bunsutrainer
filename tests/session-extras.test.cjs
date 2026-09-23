@@ -58,7 +58,7 @@ test('Classroom expiration preserves a solution or visual after the teacher has 
   }
 });
 
-test('Personal competition has no timer or speed bonus even when older settings enable it', () => {
+test('Non-competition review has no timer or speed bonus even when older settings enable it', () => {
   for (const elapsedSeconds of [4.99, 5, 5.01, 5.99]) {
     const f = fixture({ elapsedSeconds });
     const answer = f.state.session.responses[0];
@@ -70,6 +70,24 @@ test('Personal competition has no timer or speed bonus even when older settings 
     assert.equal(f.extras.clockHtml(), '');
     assert.equal(f.extras.setupHtml(), '');
   }
+});
+
+test('Competition speed bonus decreases with elapsed time, excludes hints, and awards once', () => {
+  for (const [seconds, expected] of [[0, 350], [30, 300], [60, 250], [90, 250]]) {
+    const f = fixture({ elapsedSeconds: seconds }), s = f.state.session, a = s.responses[0];
+    s.competition = { playerId: 'test' };
+    Object.assign(a, { correct: true, firstCorrect: true });
+    f.extras.submitted(a, { correct: true });
+    assert.equal(s.score, expected);
+    f.extras.submitted(a, { correct: true });
+    assert.equal(s.score, expected);
+    assert.equal(f.timerCreations(), 0);
+  }
+  const f = fixture(), s = f.state.session, a = s.responses[0];
+  s.competition = { playerId: 'test' };
+  Object.assign(a, { correct: true, firstCorrect: true, hintUsed: true });
+  f.extras.submitted(a, { correct: true });
+  assert.equal(s.score, 200);
 });
 
 test('Award uses selected variety, appears once, and cannot duplicate on repeated submission', () => {
