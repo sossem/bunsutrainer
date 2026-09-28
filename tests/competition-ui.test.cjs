@@ -14,7 +14,7 @@ function fixture(options = {}) {
   let selection = options.noSelection ? null : { ...classroom }, identity = options.identity || null;
   let currentWeek = { id: '20260914', prevId: '20260907', endMs: Date.now() + 86400000 };
   let currentDraft = { rolls: 0, candidates: [], selected: '', confirmed: null, ...options.draft };
-  const timers = new Map(), watchers = [], calls = { search: 0, register: 0, login: 0, cancel: 0, entered: [] };
+  const timers = new Map(), watchers = [], calls = { search: 0, register: 0, login: 0, cancel: 0, reset: 0, entered: [] };
   let nextTimer = 0, renders = 0;
   const context = vm.createContext({
     Date,
@@ -37,7 +37,7 @@ function fixture(options = {}) {
         currentDraft.candidates.push(currentDraft.selected);
         return { ok: true, draft: currentDraft };
       },
-      startNewDraft() { currentDraft = { rolls: 0, candidates: [], selected: '', confirmed: null }; return { ok: true }; },
+      startNewDraft() { calls.reset++; currentDraft = { rolls: 0, candidates: [], selected: '', confirmed: null }; return { ok: true }; },
       async registerNickname(value, nickname) {
         calls.register++;
         const result = options.register ? await options.register : { ok: true, identity: { nickname, classroom: value, weekId: currentWeek.id } };
@@ -193,7 +193,7 @@ test('A failed realtime subscription displays its error and refresh replaces old
   assert.doesNotMatch(f.ui.boardHtml(), /서버에 연결할 수 없어요/);
 });
 
-test('Both weekly ranking kinds render accessible gold, silver and bronze medals', () => {
+test('Class medals stay unchanged and diamond leaders receive trophies', () => {
   const f = fixture(); f.ui.openBoard();
   for (const kind of ['class', 'individual']) {
     f.ui.action('competition-kind', kind);
@@ -201,8 +201,79 @@ test('Both weekly ranking kinds render accessible gold, silver and bronze medals
     current.onData({ rows: [1,2,3,4].map(n => ({ ...classroom, id: String(n), classroom, nickname: `학생${n}`, score: 100-n })) });
     const html = f.ui.boardHtml();
     for (const [index, medal] of ['🥇','🥈','🥉'].entries()) {
-      assert.ok(html.includes(`aria-label="${index+1}위">${medal}`));
+      assert.ok(kind === 'class' ? html.includes(`aria-label="${index+1}위">${medal}`) : html.includes(`aria-label="다이아몬드리그 ${index+1}위 ${['금','은','동'][index]} 트로피"`));
     }
     assert.ok(html.includes('competition-position">4</span>'));
+  }
+});
+
+test('Individual leagues restart ranks at every boundary for current and previous weeks', () => {
+  const f = fixture(); f.ui.openBoard(); f.ui.action('competition-kind', 'individual');
+  const rows = Array.from({ length: 61 }, (_, i) => ({ id: String(i), classroom, nickname: `학생${i+1}`, score: 1000-i }));
+  for (const watcher of f.watchers.filter(w => w.active)) watcher.onData({ rows, own: rows[60] });
+  const html = f.ui.boardHtml();
+  for (const [name, overall] of [['diamond',1],['gold',6],['silver',11],['bronze',16]]) {
+    assert.equal(html.split(`data-league="${name}"`).length - 1, 2);
+    assert.equal(html.split(`data-league-rank="1" data-overall-rank="${overall}"`).length - 1, 2);
+  }
+  assert.ok(html.includes('data-league-rank="46" data-overall-rank="61"'));
+  assert.equal(html.split('class="competition-trophy trophy-').length - 1, 6);
+  assert.equal(html.split('class="rank-medal"').length - 1, 18);
+  assert.equal(html.split('competition-rank-own').length - 1, 2);
+  assert.ok(html.includes('지난주 결과 브론즈리그 순위'));
+  const current = f.watchers.find(w => w.active && w.week === 'current');
+  current.onData({ rows: [rows[60], ...rows.slice(0,60)], own: rows[60] });
+  const updated = f.ui.boardHtml().split('id="competition-prev-title"')[0];
+  assert.match(updated, /data-league-rank="1" data-overall-rank="1"[^]*?<strong>학생61<\/strong>/);
+});
+
+test('Empty and partial individual leagues have no invented entrants or awards', () => {
+  const f = fixture(); f.ui.openBoard(); f.ui.action('competition-kind', 'individual');
+  for (const watcher of f.watchers.filter(w => w.active)) watcher.onData({ rows: [] });
+  assert.equal(f.ui.boardHtml().split('data-league="').length - 1, 8);
+  assert.ok(!f.ui.boardHtml().includes('competition-trophy trophy-'));
+  const current = f.watchers.find(w => w.active && w.week === 'current');
+  current.onData({ rows: [{ id:'one', classroom, nickname:'<img onerror=bad>', score:1 }] });
+  const html = f.ui.boardHtml();
+  assert.ok(html.includes('&lt;img onerror=bad&gt;'));
+  assert.ok(!html.includes('<img onerror'));
+  assert.equal(html.split('class="competition-trophy trophy-').length - 1, 1);
+});
+
+test('Visible reset requires acknowledgement and a separate confirmation; cancellation preserves input', () => {
+  const f = fixture({ draft: { id:'draft-a', rolls:1, confirmed:'공부하는토끼', candidates:['공부하는토끼'] } });
+  f.ui.openEntry(); f.ui.input({ target: { id:'competition-pin', value:'123456' } });
+  assert.ok(f.ui.entryHtml().includes('비밀번호 입력 (숫자 6자리)'));
+  assert.ok(!f.ui.entryHtml().includes('PIN'));
+  f.ui.action('competition-reset-confirm');
+  f.ui.action('competition-new-draft'); f.ui.action('competition-new-draft');
+  assert.equal(f.calls.reset, 0);
+  f.ui.action('competition-reset-confirm');
+  assert.equal(f.calls.reset, 0);
+  f.ui.change({ target: { id:'competition-reset-ack', checked:true } });
+  f.ui.action('competition-reset-cancel');
+  f.ui.action('competition-reset-confirm');
+  assert.equal(f.calls.reset, 0);
+  assert.ok(f.ui.entryHtml().includes('value="123456"'));
+  assert.ok(f.ui.entryHtml().includes('value="공부하는토끼"'));
+  f.ui.action('competition-new-draft');
+  assert.ok(f.ui.entryHtml().includes('data-action="competition-reset-confirm" disabled'));
+  f.ui.change({ target: { id:'competition-reset-ack', checked:true } });
+  f.ui.action('competition-reset-confirm'); f.ui.action('competition-reset-confirm');
+  assert.equal(f.calls.reset, 1);
+  assert.equal(f.draft().rolls, 0);
+  assert.ok(!f.ui.entryHtml().includes('value="123456"'));
+});
+
+test('Class changes, week changes and navigation invalidate reset confirmation', () => {
+  for (const transition of ['class', 'week', 'leave']) {
+    const f = fixture({ draft: { id:'draft-a', rolls:1, confirmed:'공부하는토끼', candidates:['공부하는토끼'] } });
+    f.ui.openEntry(); f.ui.action('competition-new-draft');
+    f.ui.change({ target: { id:'competition-reset-ack', checked:true } });
+    if (transition === 'class') f.ui.change({ target: { value:'5', dataset:{competitionField:'grade'} } });
+    if (transition === 'week') { f.nextWeek(); f.fireTimer(); }
+    if (transition === 'leave') f.ui.leave();
+    f.ui.action('competition-reset-confirm');
+    assert.equal(f.calls.reset, 0, transition);
   }
 });

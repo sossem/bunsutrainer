@@ -32,12 +32,13 @@ function firestore() {
         },
         orderBy(field, direction) {
           assert.equal(field, 'score'); assert.equal(direction, 'desc');
-          return { limit(limit) { return { onSnapshot(callback) {
+          const query = (limit = Infinity) => ({ onSnapshot(callback) {
             const fn = () => callback({ docs: [...documents.keys()].filter(key => key.startsWith(`${name}/`))
               .map(key => ({ id: key.slice(name.length + 1), data: () => plain(documents.get(key)) }))
               .sort((a, b) => b.data().score - a.data().score).slice(0, limit) });
             listeners.add(fn); fn(); return () => listeners.delete(fn);
-          } }; } };
+          } });
+          return { onSnapshot: query().onSnapshot, limit: query };
         }
       };
     },
@@ -77,6 +78,35 @@ async function join(env, selectedClass = classroom) {
 const record = (identity, changes = {}) => ({ id: 'session-1', competition: identity, completed: true, rankingEnabled: true,
   date: now, score: 65, total: 5, correct: 5, firstCorrect: 5, settings: { difficulty: 'normal' }, ...changes });
 const flush = () => new Promise(resolve => setImmediate(resolve));
+
+test('Individual subscriptions include ranks beyond fifty and keep deterministic ties; class limit stays fifty', async () => {
+  const env = setup(), identity = await join(env);
+  for (let i = 1; i <= 60; i++) {
+    const classroom = { ...identity.classroom, schoolName: `리그초${i}`, id: `[서울 중구] 리그초${i} 5학년 2반` };
+    const playerId = `${classroom.id}::${identity.nickname}`;
+    const stats = { score: Math.floor(i / 2), sessions: 1 };
+    env.remote.documents.set(`weeklyCompetitionPlayers_20260914/${playerId}`, { ...identity, classroom, playerId, ...stats });
+    env.remote.documents.set(`weeklyCompetitionClasses_20260914/${classroom.id}`, { ...classroom, ...stats });
+  }
+  let players, classes;
+  const closePlayers = env.repo.watchRankings({ kind:'individual' }, value => { players = value; });
+  const closeClasses = env.repo.watchRankings({ kind:'class' }, value => { classes = value; });
+  await flush();
+  assert.equal(players.rows.length, 61);
+  assert.equal(classes.rows.length, 50);
+  assert.ok(players.rows.some(row => row.id === identity.playerId));
+  for (let i = 1; i < players.rows.length; i++) {
+    const a = players.rows[i-1], b = players.rows[i];
+    assert.ok(a.score > b.score || (a.score === b.score && a.id.localeCompare(b.id) < 0));
+  }
+  const first = players.rows[0].id;
+  env.remote.documents.get(`weeklyCompetitionPlayers_20260914/${identity.playerId}`).score = 1000;
+  env.remote.emit();
+  assert.equal(players.rows[0].id, identity.playerId);
+  assert.notEqual(players.rows[0].id, first);
+  closePlayers(); closeClasses();
+  assert.equal(env.remote.listeners.size, 0);
+});
 
 test('PIN rejects impersonation, is salted, never persists plaintext, and old accounts remain untouched', async () => {
   const env = setup(), identity = await join(env);

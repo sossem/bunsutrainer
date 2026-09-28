@@ -21,12 +21,13 @@
         },
         orderBy(field, direction) {
           if (field !== 'score' || direction !== 'desc') throw new Error('Unexpected ranking query');
-          return { limit(limit) { return { onSnapshot(callback) {
+          const query = (limit = Infinity) => ({ onSnapshot(callback) {
             const run = () => callback({ docs: [...documents.keys()].filter(path => path.startsWith(`${name}/`))
               .map(path => ({ id: path.slice(name.length + 1), data: () => clone(documents.get(path)) }))
               .sort((a, b) => b.data().score - a.data().score).slice(0, limit) });
             listeners.add(run); run(); return () => listeners.delete(run);
-          } }; } };
+          } });
+          return { onSnapshot: query().onSnapshot, limit: query };
         }
       };
     },

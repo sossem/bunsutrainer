@@ -42,8 +42,8 @@
   const failure = message => ({ ok: false, message });
   const validPin = pin => typeof pin === 'string' && /^\d{6}$/.test(pin);
   async function pinHash(pin, salt) {
-    if (!validPin(pin)) throw new Error('PIN은 숫자 6자리로 입력해 주세요.');
-    if (!root.crypto?.subtle) throw new Error('PIN 보호를 위해 HTTPS 또는 localhost로 접속해 주세요.');
+    if (!validPin(pin)) throw new Error('비밀번호는 숫자 6자리로 입력해 주세요.');
+    if (!root.crypto?.subtle) throw new Error('비밀번호를 안전하게 확인하려면 HTTPS 주소로 접속해 주세요. 로컬에서는 localhost를 이용해 주세요.');
     const key = await root.crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
     const bits = await root.crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 600000, hash: 'SHA-256' }, key, 256);
     return Array.from(new Uint8Array(bits), n => n.toString(16).padStart(2, '0')).join('');
@@ -73,7 +73,7 @@
             if (!saved || saved.classroom.id !== identity.classroom.id) throw new Error('닉네임 등록 정보를 확인해 주세요.');
             const existing = await transaction.get(db.collection(names.players).doc(saved.playerId));
             const protection = existing.data()?.pinCredential;
-            if (!protection || await pinHash(pin, protection.salt) !== protection.hash) throw new Error('등록할 때 사용한 PIN을 입력해 주세요.');
+            if (!protection || await pinHash(pin, protection.salt) !== protection.hash) throw new Error('닉네임을 만들 때 정한 비밀번호를 입력해 주세요.');
             return { identity: saved, duplicate: true };
           }
           const player = await transaction.get(playerRef);
@@ -89,13 +89,13 @@
         const snapshot = await db.collection(collections(identity.weekId).players).doc(identity.playerId).get();
         if (!snapshot.exists) return null;
         const protection = snapshot.data().pinCredential;
-        if (!protection) throw new Error('PIN 도입 전 닉네임이에요. 기존 점수는 보존되며, 새 닉네임과 PIN으로 시작해 주세요.');
-        if (await pinHash(pin, protection.salt) !== protection.hash) throw new Error('닉네임 또는 PIN을 확인해 주세요.');
+        if (!protection) throw new Error('비밀번호를 사용하기 전에 만든 닉네임이에요. 기존 점수는 그대로 남아요. 새 닉네임과 비밀번호를 만들어 시작해 주세요.');
+        if (await pinHash(pin, protection.salt) !== protection.hash) throw new Error('닉네임 또는 비밀번호를 확인해 주세요.');
         assertWeek(identity.weekId);
         return snapshot.exists ? identityFrom(snapshot.data()) : null;
       },
       async contribute(payload) {
-        if (!await this.login(payload.identity, payload.pin)) throw new Error('PIN으로 다시 입장해 주세요.');
+        if (!await this.login(payload.identity, payload.pin)) throw new Error('비밀번호로 다시 입장해 주세요.');
         const names = collections(payload.identity.weekId);
         const playerRef = db.collection(names.players).doc(payload.identity.playerId);
         const classRef = db.collection(names.classes).doc(payload.identity.classroom.id);
@@ -139,7 +139,10 @@
         const fail = error => { if (active) { stop(); onError(error); } };
         const emit = () => { if (active) onData({ rows, own: rows.find(row => row.id === ownId) || own, weekId }); };
         try {
-          const closeRows = reference.orderBy('score', 'desc').limit(50).onSnapshot(snapshot => {
+          // Individual leagues include every bronze participant, including ranks beyond 50.
+          const ordered = reference.orderBy('score', 'desc');
+          const query = kind === 'individual' ? ordered : ordered.limit(50);
+          const closeRows = query.onSnapshot(snapshot => {
             rows = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })); emit();
           }, fail);
           if (active) unsubscribe.push(closeRows); else closeRows();
@@ -232,14 +235,14 @@
       return { ok: true, draft: next, message: '새 닉네임을 발급받을 수 있어요. 기존 닉네임의 점수는 그대로 남아요.' };
     }
     async function registerNickname(value, nickname, pin) {
-      if (!validPin(pin)) return failure('PIN은 숫자 6자리로 입력해 주세요.');
+      if (!validPin(pin)) return failure('비밀번호는 숫자 6자리로 입력해 주세요.');
       const classroom = classroomFrom(value), draft = getDraft(classroom), weekId = getWeek(clock()).id;
       if (!classroom || !draft.id || !draft.candidates.includes(nickname) || (draft.confirmed && draft.confirmed !== nickname)) return failure('주사위로 나온 후보 중에서 닉네임을 선택해 주세요.');
       const identity = { weekId, playerId: playerIdFor(classroom, nickname), nickname, classroom };
       try {
         const remote = await deadline(provider(), timeout, '온라인 연결을 확인하지 못했어요. 다시 시도해 주세요.');
         if (getWeek(clock()).id !== weekId) return failure(expiredMessage);
-        const result = await deadline(remote.register({ identity, draftId: draft.id, pin }), timeout, '등록 결과를 아직 확인하지 못했어요. 같은 닉네임과 PIN으로 다시 확정해 주세요.');
+        const result = await deadline(remote.register({ identity, draftId: draft.id, pin }), timeout, '등록 결과를 아직 확인하지 못했어요. 같은 닉네임과 비밀번호로 다시 확정해 주세요.');
         if (getWeek(clock()).id !== weekId) return failure(expiredMessage);
         const registered = identityFrom(result.identity);
         if (!registered || registered.weekId !== weekId || registered.classroom.id !== classroom.id || !draft.candidates.includes(registered.nickname)) return failure('닉네임 등록 결과를 확인해 주세요.');
@@ -251,8 +254,8 @@
     async function login(value, entered, pin) {
       const epoch = ++identityEpoch;
       authenticated = null; sessionPin = null;
-      if (!validPin(pin)) return failure('PIN은 숫자 6자리로 입력해 주세요.');
-      if (Date.now() < retryAfter) return failure('PIN을 여러 번 틀렸어요. 30초 뒤 다시 시도해 주세요.');
+      if (!validPin(pin)) return failure('비밀번호는 숫자 6자리로 입력해 주세요.');
+      if (Date.now() < retryAfter) return failure('비밀번호를 여러 번 틀렸어요. 30초 뒤 다시 시도해 주세요.');
       const classroom = classroomFrom(value), nickname = clean(entered), weekId = getWeek(clock()).id;
       if (!classroom || !nicknameValid(nickname)) return failure('학교와 반을 확인하고 확정한 닉네임을 정확히 입력해 주세요.');
       const identity = { weekId, playerId: playerIdFor(classroom, nickname), nickname, classroom };
@@ -279,7 +282,7 @@
         || !integer(record.correct, record.total) || !integer(record.firstCorrect, record.correct)
         || !max || !integer(record.score, record.total * max) || typeof record.date !== 'string' || !Number.isFinite(Date.parse(record.date))) return failure('5문제 이상을 끝까지 마친 이번 주 랭킹전 학습만 반영할 수 있어요.');
       if (identity.weekId !== weekId || getWeek(record.date).id !== weekId) return failure(expiredMessage);
-      if (getIdentity()?.playerId !== identity.playerId) return failure('이 기록의 닉네임과 PIN으로 다시 입장한 뒤 반영해 주세요.');
+      if (getIdentity()?.playerId !== identity.playerId) return failure('이 기록의 닉네임과 비밀번호로 다시 입장한 뒤 반영해 주세요.');
       if ((record.scoringVersion === 3 || record.settings.grade != null) && record.settings.grade !== identity.classroom.grade) return failure('우리 반 학년의 문제만 랭킹에 반영할 수 있어요.');
       try {
         const remote = await deadline(provider(), timeout, '온라인 연결을 확인하지 못했어요. 기록에서 다시 시도할 수 있어요.');
@@ -309,7 +312,8 @@
               if (kind === 'individual') { const person = identityFrom(row); return person && person.weekId === weekId ? { id: row.id, nickname: person.nickname, classroom: person.classroom, score: row.score, sessions: row.sessions } : null; }
               const classroom = classroomFrom(row); return classroom ? { ...classroom, id: row.id, score: row.score, sessions: row.sessions } : null;
             };
-            const rows = (Array.isArray(data.rows) ? data.rows : []).map(normalize).filter(Boolean).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, 50);
+            const sorted = (Array.isArray(data.rows) ? data.rows : []).map(normalize).filter(Boolean).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+            const rows = kind === 'individual' ? sorted : sorted.slice(0, 50);
             onData({ rows, own: rows.find(row => row.id === ownId) || normalize(data.own), weekId });
           }, error => { if (revision === ownRevision) fail(error); });
           if (active && revision === ownRevision) unsubscribe = close; else close();

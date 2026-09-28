@@ -192,6 +192,9 @@ def run():
             check(f'legacy storage retained: {key}', b.eval('localStorage.getItem(' + json.dumps(key) + ')') == value)
         check('history records survive reload with competition fields', b.eval('LearningStorage.list().length===3 && LearningStorage.list().every(r=>r.competition.playerId===WeeklyCompetition.getIdentity().playerId)'))
         click('competition-change'); click('competition-new-draft')
+        check('reset first tap only opens confirmation', b.eval("!!WeeklyCompetition.getDraft(ClassRanking.getSelection()).confirmed"))
+        b.eval("(()=>{const e=document.querySelector('#competition-reset-ack');e.checked=true;e.dispatchEvent(new Event('change',{bubbles:true}));})()")
+        click('competition-reset-confirm')
         check('forgotten nickname opens fresh ten-roll draft while old player stays', b.eval("WeeklyCompetition.getDraft(ClassRanking.getSelection()).rolls===0 && [...__competitionFixture.documents.keys()].some(k=>k.includes('weeklyCompetitionPlayers_'))"))
         # Move the fixture's repository clock across a real Monday 08:00 boundary.
         # Opening the ranking again invokes the actual view's week rollover logic.

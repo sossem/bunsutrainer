@@ -34,6 +34,34 @@
 .competition-rank-score { color: var(--green); font-size: 20px; font-weight: 850; text-align: right; }
 .competition-rank-score small { margin-left: 4px; font-size: 12px; font-weight: 500; }
 .competition-legacy-link { margin: 20px 0 0; text-align: right; }
+.competition-league-guide { padding: 16px 20px; margin-bottom: 24px; border: 1px solid var(--line); border-radius: 14px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+.competition-league { margin-top: 20px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.competition-league-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 14px; background: var(--league-bg); color: var(--league-ink); }
+.competition-league-heading h3 { margin: 0; font-size: 18px; }
+.competition-league-heading > span { font-size: 12px; }
+.league-diamond { --league-bg: #eaf2fb; --league-ink: #285b86; }
+.league-gold { --league-bg: #fff4d8; --league-ink: #806016; }
+.league-silver { --league-bg: #eef1f4; --league-ink: #526171; }
+.league-bronze { --league-bg: #f8eee5; --league-ink: #885a33; }
+.competition-league .competition-rank-row:last-child { border-bottom: 0; }
+.competition-league-empty { margin: 0; padding: 18px 14px; }
+.competition-position > small { display: block; font-size: 11px; line-height: 1.4; }
+.competition-trophy { display: block; width: 36px; height: 40px; max-width: 100%; margin: 0 auto; filter: drop-shadow(0 2px 1px #0002); }
+.trophy-1 { color: #b98911; }
+.trophy-2 { color: #788797; }
+.trophy-3 { color: #ac6c39; }
+.competition-trophy-number { fill: #fff; font-size: 12px; font-weight: 850; }
+.competition-reset { margin: 20px 0; padding: 18px; border: 2px solid #dbbc72; border-radius: 14px; background: #fffaf0; }
+.competition-reset h3 { font-size: 17px; margin: 0 0 10px; }
+.competition-reset p { font-size: 14px; line-height: 1.7; }
+.competition-reset > .btn { min-height: 54px; white-space: normal; }
+.competition-reset > .ranking-note { margin: 10px 0 0; }
+.competition-reset-confirmation { margin-top: 20px; padding-top: 20px; border-top: 1px solid #dbbc72; }
+.competition-reset-check { display: flex; align-items: flex-start; gap: 10px; padding: 14px 0; font-size: 14px; cursor: pointer; }
+.competition-reset-check input { flex: 0 0 22px; width: 22px; height: 22px; margin: 2px 0; accent-color: var(--green); }
+.competition-reset-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
+.competition-reset-actions .btn { min-height: 48px; white-space: normal; }
+#competition-pin, #competition-pin-confirm { display: block; width: 100%; min-height: 50px; margin: 8px 0 14px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: inherit; }
 @media (max-width: 900px) {
   .competition-entry-grid, .competition-boards { grid-template-columns: 1fr; }
 }
