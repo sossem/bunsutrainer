@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isClasses(coll)  { return coll.matches('(weekly|decimalWeekly)CompetitionClasses_[0-9]{8}'); }
+    function isPlayers(coll)  { return coll.matches('(weekly|decimalWeekly)CompetitionPlayers_[0-9]{8}'); }
+    function isReceipts(coll) { return coll.matches('(weekly|decimalWeekly)CompetitionReceipts_[0-9]{8}'); }
+    function isDecimalPlayers(coll) { return coll.matches('decimalWeeklyCompetitionPlayers_[0-9]{8}'); }
+    function isLegacy(coll)  { return coll.matches('(classRankings|classGrowthRankings)_[0-9]{8}'); }
+    function weekOf(coll)    { return coll.split('_')[1]; }
+
+    function isOneSession(after, before) {
+      let solved = after.totalSolved - before.totalSolved;
+      return after.score is int && after.sessions is int
+        && after.totalSolved is int && after.correctCount is int
+        && after.sessions == before.sessions + 1
+        && solved >= 5 && solved <= 200
+        && after.correctCount >= before.correctCount
+        && after.correctCount - before.correctCount <= solved
+        && after.score >= before.score
+        && after.score - before.score <= solved * 2800;
+    }
+    function onlyScoreFieldsChange() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['score', 'sessions', 'totalSolved', 'correctCount', 'updatedAt', 'scoreVersion']);
+    }
+    function validFirstScore(d) {
+      return d.score is int && d.sessions == 1
+        && d.totalSolved is int && d.totalSolved >= 5 && d.totalSolved <= 200
+        && d.correctCount is int && d.correctCount >= 0 && d.correctCount <= d.totalSolved
+        && d.score >= 0 && d.score <= d.totalSolved * 2800;
+    }
+    function validNewClass(coll, docId) {
+      let d = request.resource.data;
+      return d.id == docId && d.weekId == weekOf(coll) && validFirstScore(d);
+    }
+    function validNewPlayer(coll, docId) {
+      let d = request.resource.data;
+      return d.playerId == docId && d.weekId == weekOf(coll)
+        && d.score == 0 && d.sessions == 0 && d.totalSolved == 0 && d.correctCount == 0
+        && d.pinCredential.salt is string && d.pinCredential.hash is string;
+    }
+    // Decimal scores reuse the existing weekly identity; no second PIN registration.
+    function validNewDecimalPlayer(coll, docId) {
+      let d = request.resource.data;
+      let identity = get(/databases/$(database)/documents/$('weeklyCompetitionPlayers_' + weekOf(coll))/$(docId)).data;
+      return d.playerId == docId && d.weekId == weekOf(coll)
+        && d.trainerId == 'decimal' && d.platformPlayerId == docId
+        && d.playerId == identity.playerId && d.weekId == identity.weekId
+        && d.nickname == identity.nickname && d.classroom == identity.classroom
+        && validFirstScore(d);
+    }
+    function validNewReceipt(docId) {
+      return docId.matches('(nickname|session)-.+')
+        && request.resource.data.kind in ['nickname', 'session'];
+    }
+    match /{coll}/{docId} {
+      allow read: if isClasses(coll) || isPlayers(coll) || isLegacy(coll);
+      allow get: if isReceipts(coll);
+      allow create: if (isClasses(coll) && validNewClass(coll, docId))
+                    || (isPlayers(coll) && !isDecimalPlayers(coll) && validNewPlayer(coll, docId))
+                    || (isDecimalPlayers(coll) && validNewDecimalPlayer(coll, docId))
+                    || (isReceipts(coll) && validNewReceipt(docId));
+      allow update: if (isClasses(coll) || isPlayers(coll))
+                    && onlyScoreFieldsChange()
+                    && isOneSession(request.resource.data, resource.data);
+      // No deletes, receipt updates, or legacy writes.
+    }
+  }
+}

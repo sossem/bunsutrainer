@@ -26,7 +26,7 @@
     const grade = Number(value.grade), classNumber = Number(value.className);
     if (!schoolName || schoolName.length > 100 || !region || region.length > 80 || /[\/\x00-\x1f]/.test(schoolName + region)
       || !/^[0-9]+$/.test(String(value.grade)) || !/^[0-9]+$/.test(String(value.className))
-      || !integer(grade, 6) || grade < 4 || !integer(classNumber, 30) || classNumber < 1) return null;
+      || !integer(grade, 6) || grade < (root.MathTrainerConfig?.allowGrade3 ? 3 : 4) || !integer(classNumber, 30) || classNumber < 1) return null;
     const className = String(classNumber);
     return { schoolName, region, grade, className, id: `[${region}] ${schoolName} ${grade}학년 ${className}반` };
   }
@@ -38,8 +38,14 @@
       || value.playerId !== playerIdFor(classroom, value.nickname)) return null;
     return { weekId: value.weekId, playerId: value.playerId, nickname: value.nickname, classroom };
   }
-  const collections = weekId => ({ classes: `weeklyCompetitionClasses_${weekId}`, players: `weeklyCompetitionPlayers_${weekId}`, receipts: `weeklyCompetitionReceipts_${weekId}` });
+  const collections = (weekId,trainerId='fraction') => {
+    if(!['fraction','decimal'].includes(trainerId))throw new Error('지원하지 않는 학습 영역이에요.');
+    const prefix=trainerId==='decimal'?'decimalWeekly':'weekly';
+    return {classes:`${prefix}CompetitionClasses_${weekId}`,players:`${prefix}CompetitionPlayers_${weekId}`,receipts:`${prefix}CompetitionReceipts_${weekId}`};
+  };
   const failure = message => ({ ok: false, message });
+  const permissionDenied = error => /(?:permission-denied|PERMISSION_DENIED|Missing or insufficient permissions)/i.test(`${error?.code || ''} ${error?.message || ''}`);
+  const permissionMessage = trainerId => `${trainerId === 'decimal' ? '소수' : '분수'} 랭킹의 서버 접근 권한이 거부됐어요. 관리자에게 랭킹 권한 설정 확인을 요청해 주세요. (permission-denied)`;
   const validPin = pin => typeof pin === 'string' && /^\d{6}$/.test(pin);
   async function pinHash(pin, salt) {
     if (!validPin(pin)) throw new Error('비밀번호는 숫자 6자리로 입력해 주세요.');
@@ -96,7 +102,8 @@
       },
       async contribute(payload) {
         if (!await this.login(payload.identity, payload.pin)) throw new Error('비밀번호로 다시 입장해 주세요.');
-        const names = collections(payload.identity.weekId);
+        const trainerId=payload.trainerId??'fraction';
+        const names = collections(payload.identity.weekId,trainerId);
         const playerRef = db.collection(names.players).doc(payload.identity.playerId);
         const classRef = db.collection(names.classes).doc(payload.identity.classroom.id);
         const receiptRef = db.collection(names.receipts).doc(`session-${encodeURIComponent(payload.sessionId)}`);
@@ -112,7 +119,14 @@
           const previousClass = await transaction.get(classRef);
           const previousPlayer = player.exists ? player.data() : null;
           const registered = identityFrom(previousPlayer);
-          if (!registered || registered.playerId !== payload.identity.playerId || registered.weekId !== payload.identity.weekId) throw new Error('이번 주 닉네임 등록을 확인할 수 없어요. 다시 입장해 주세요.');
+          if (trainerId==='fraction'||player.exists) {
+            if (!registered || registered.playerId !== payload.identity.playerId || registered.weekId !== payload.identity.weekId) throw new Error('이번 주 닉네임 등록을 확인할 수 없어요. 다시 입장해 주세요.');
+          }
+          if(trainerId==='decimal'&&player.exists&&!previousPlayer.platformPlayerId){
+            const old=previousPlayer.pinCredential;
+            if(!old||await pinHash(payload.pin,old.salt)!==old.hash)throw new Error('같은 닉네임의 기존 소수 계정이 있어 자동 연결하지 않았어요. 기존 기록 확인이 필요해요.');
+          }
+          if(trainerId==='decimal'&&previousPlayer?.platformPlayerId&&previousPlayer.platformPlayerId!==payload.identity.playerId)throw new Error('계정 연결 정보를 확인해 주세요.');
           const addScore = previous => {
             const result = {};
             for (const [key, addition] of Object.entries({ score: payload.score, sessions: 1, totalSolved: payload.total, correctCount: payload.firstCorrect })) {
@@ -124,15 +138,16 @@
           };
           const playerScore = addScore(previousPlayer), classScore = addScore(previousClass.exists ? previousClass.data() : null);
           assertWeek(payload.identity.weekId);
-          transaction.set(playerRef, playerScore, { merge: true });
-          transaction.set(classRef, { ...payload.identity.classroom, weekId: payload.identity.weekId, ...classScore }, { merge: true });
-          transaction.set(receiptRef, { kind: 'session', sessionId: payload.sessionId, playerId: payload.identity.playerId, classId: payload.identity.classroom.id,
+          // Existing documents only change score fields, as required by the deployed rules.
+          transaction.set(playerRef, { ...playerScore, ...(!player.exists ? { ...payload.identity, trainerId, platformPlayerId: payload.identity.playerId } : {}) }, { merge: true });
+          transaction.set(classRef, { ...(!previousClass.exists ? { ...payload.identity.classroom, trainerId, weekId: payload.identity.weekId } : {}), ...classScore }, { merge: true });
+          transaction.set(receiptRef, { kind: 'session', trainerId, sessionId: payload.sessionId, playerId: payload.identity.playerId, classId: payload.identity.classroom.id,
             weekId: payload.identity.weekId, score: payload.score, total: payload.total, firstCorrect: payload.firstCorrect, difficulty: payload.difficulty, completedAt: payload.date, scoreVersion: 3 });
           return { duplicate: false };
         });
       },
-      watch({ weekId, kind, ownId }, onData, onError) {
-        const reference = db.collection(collections(weekId)[kind === 'individual' ? 'players' : 'classes']);
+      watch({ weekId, kind, ownId, trainerId='fraction' }, onData, onError) {
+        const reference = db.collection(collections(weekId,trainerId)[kind === 'individual' ? 'players' : 'classes']);
         let active = true, rows = [], own = null;
         const unsubscribe = [];
         const stop = () => { active = false; for (const close of unsubscribe.splice(0)) close(); };
@@ -273,6 +288,8 @@
       } catch (error) { if (++failedLogins >= 5) { retryAfter = Date.now() + 30000; failedLogins = 0; } return failure(`입장하지 못했어요. ${error.message || ''}`); }
     }
     async function submit(record) {
+      const trainerId=record?.trainerId??'fraction';
+      if(!['fraction','decimal'].includes(trainerId)||((record?.domain==='decimal'||record?.settings?.unit?.startsWith('decimal-'))&&trainerId!=='decimal'))return failure('학습 영역을 확인해 주세요.');
       const identity = identityFrom(record?.competition), weekId = getWeek(clock()).id;
       const difficulty = record?.settings?.difficulty;
       const max = Object.hasOwn(scoreMax, difficulty) && ([2, 3].includes(record.scoringVersion)
@@ -287,15 +304,18 @@
       try {
         const remote = await deadline(provider(), timeout, '온라인 연결을 확인하지 못했어요. 기록에서 다시 시도할 수 있어요.');
         if (getWeek(clock()).id !== weekId) return failure(expiredMessage);
-        const result = await deadline(remote.contribute({ identity, pin: sessionPin, sessionId: record.id, score: record.score, total: record.total, firstCorrect: record.firstCorrect, date: record.date, difficulty }), timeout,
+        const result = await deadline(remote.contribute({ identity, pin: sessionPin, sessionId: record.id, score: record.score, total: record.total, firstCorrect: record.firstCorrect, date: record.date, difficulty, trainerId }), timeout,
           '반영 결과를 아직 확인하지 못했어요. 기록에서 다시 시도해도 점수는 한 번만 반영돼요.');
         return { ok: true, duplicate: result.duplicate === true, message: result.duplicate ? '이미 학급과 개인 점수에 반영한 학습이에요.' : `학급과 개인 주간 점수에 각각 ${record.score}점을 더했어요.` };
-      } catch (error) { return failure(`온라인 점수 반영 결과를 확인하지 못했어요. 기록에서 다시 시도할 수 있어요. ${error.message || ''}`); }
+      } catch (error) {
+        if (permissionDenied(error)) return failure(`${permissionMessage(trainerId)} 학습 기록은 유지되며, 권한 문제가 해결된 후 기록에서 다시 반영할 수 있어요.`);
+        return failure(`온라인 점수 반영 결과를 확인하지 못했어요. 기록에서 다시 시도할 수 있어요. ${error.message || ''}`);
+      }
     }
-    function watchRankings({ week = 'current', kind = 'class' } = {}, onData, onError = () => {}) {
+    function watchRankings({ week = 'current', kind = 'class', trainerId='fraction' } = {}, onData, onError = () => {}) {
       let active = true, unsubscribe = null, timer = null, revision = 0;
       week = week === 'prev' ? 'prev' : 'current'; kind = kind === 'individual' ? 'individual' : 'class';
-      const fail = error => { if (active) onError(error instanceof Error ? error : new Error(String(error))); };
+      const fail = error => { if (active) onError(permissionDenied(error) ? new Error(permissionMessage(trainerId)) : error instanceof Error ? error : new Error(String(error))); };
       async function connect() {
         const ownRevision = ++revision;
         if (unsubscribe) { unsubscribe(); unsubscribe = null; }
@@ -305,7 +325,7 @@
           const remote = await deadline(provider(), timeout, '랭킹 연결 시간이 초과됐어요. 다시 시도해 주세요.');
           if (!active || revision !== ownRevision) return;
           if (getWeek(clock()).id !== current.id) { connect(); return; }
-          const close = remote.watch({ weekId, kind, ownId }, data => {
+          const close = remote.watch({ weekId, kind, ownId, trainerId }, data => {
             if (!active || revision !== ownRevision) return;
             const normalize = row => {
               if (!row || typeof row.id !== 'string' || !integer(row.score) || !integer(row.sessions)) return null;

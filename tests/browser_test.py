@@ -145,7 +145,7 @@ class Browser:
             raise RuntimeError(f"JavaScript evaluation failed: {result['exceptionDetails']}")
         return result.get("result", {}).get("value")
 
-    def navigate(self, path="/index.html"):
+    def navigate(self, path="/index.html?trainer=fraction"):
         url = path if path.startswith("http") else self.base_url + path
         result = self.command("Page.navigate", {"url": url})
         if result.get("errorText"):

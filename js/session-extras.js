@@ -61,6 +61,7 @@
       pendingReward = null;
       s.combo = 0; s.comboMax = 0; s.score = 0; s.timers = [];
       s.competition = s.mode === 'personal' && !s.isReview ? root.WeeklyCompetition.getIdentity() : null;
+      if(s.trainerId==='decimal'&&s.problems.some(p=>!p.rankEligibility))s.competition=null;
       s.classroom = s.competition?.classroom || Ranking.getSelection();
       s.settings.rankingEnabled = !!s.competition;
       s.settings.gamificationEnabled = s.mode === 'personal' && !s.isReview;
@@ -76,7 +77,7 @@
         a.solveSeconds = Math.max(0, (performance.now() - s.questionStartedAt) / 1000);
         const reward = Game.scoreAnswer({ correct: true, firstAttempt: a.firstCorrect,
           hintUsed: a.hintUsed, revealed: a.revealed, timedOut: a.timedOut,
-          speedEnabled: !!s.competition, solveSeconds: a.solveSeconds, unit: s.settings.unit, type: s.settings.type, difficulty: s.settings.difficulty, combo: s.combo,
+          speedEnabled: !!s.competition && (s.trainerId!=='decimal'||s.problems[s.index].speedEligible), solveSeconds: a.solveSeconds, unit: s.settings.unit, type: s.settings.type, difficulty: s.settings.difficulty, combo: s.combo,
           timerEnabled: !!time?.enabled && !a.timerReset, remainingRatio: time ? 1 - time.elapsedSeconds / time.seconds : 0 });
         if (s.settings.gamificationEnabled) {
           a.score = reward.score; s.score += reward.score; s.combo = reward.combo;
@@ -110,6 +111,7 @@
     }
     function complete(record, atEnd) {
       const s = state.session;
+      if(s.trainerId)record.trainerId=s.trainerId;
       record.completed = atEnd && s.responses.every(a => a.attempts.length > 0 || a.revealed);
       Object.assign(record, { gameVersion: 1, scoringVersion: 3, gamificationEnabled: !!s.settings.gamificationEnabled,
         score: s.score, comboMax: s.comboMax, timerEnabled: !!s.settings.timerSeconds,
@@ -124,14 +126,15 @@
     async function contribute(record) {
       if (!record || busy.has(record.id) || !['pending', 'failed'].includes(record.classContributionStatus)) return;
       busy.add(record.id);
+      const history=root.TrainerHistory?.forTrainer(record.trainerId)||root.LearningStorage;
       try {
-        const result = record.competition ? await root.WeeklyCompetition.submit(record) : await Ranking.updateClassScore(record, { mode: record.rankingMode });
+        const result = record.competition ? await (root.MathPlatform?root.MathPlatform.submit(record):root.WeeklyCompetition.submit(record)) : await Ranking.updateClassScore(record, { mode: record.rankingMode });
         record.classContributionStatus = result.ok ? record.rankingMode === 'demo' ? 'demo' : 'synced' : 'failed';
-        const saved = root.LearningStorage.list().some(r => r.id === record.id) ? root.LearningStorage.save(record) : { ok: true };
+        const saved = history.list().some(r => r.id === record.id) ? history.save(record) : { ok: true };
         notify(result.message + (saved.ok ? '' : ` ${saved.message}`));
       } catch (_) {
         record.classContributionStatus = 'failed';
-        if (root.LearningStorage.list().some(r => r.id === record.id)) root.LearningStorage.save(record);
+        if (history.list().some(r => r.id === record.id)) history.save(record);
         notify('랭킹 반영을 마치지 못했어요. 학습 기록에서 다시 시도해 주세요.');
       }
       finally { busy.delete(record.id); if (state.view === 'results' || state.view === 'history') render(); }
@@ -142,7 +145,7 @@
       return `<div class="record-growth">${r.competition ? `<span>${E(r.competition.nickname)} · 학습 점수 ${r.score}점</span>` : r.gamificationEnabled ? `<span>이전 기록 점수 ${r.score}점</span>` : ''}${r.gamificationEnabled ? `<span>최대 연속 정답 ${r.comboMax}개</span>` : ''}${r.rankingEnabled ? `<span>${E(status[r.classContributionStatus] || '')} (${r.classScoreContribution}점)</span>${['failed','pending'].includes(r.classContributionStatus) ? button('contribute','반영 다시 시도','btn-small','',`data-value="${E(r.id)}" ${busy.has(r.id) ? 'disabled' : ''}`) : ''}` : ''}</div>`;
     }
     function action(name, value) {
-      if (name === 'contribute') { contribute(state.record?.id === value ? state.record : root.LearningStorage.list().find(r => r.id === value)); return true; }
+      if (name === 'contribute') { contribute(state.record?.id === value ? state.record : (root.TrainerHistory?.forTrainer(state.trainerId)||root.LearningStorage).list().find(r => r.id === value)); return true; }
       if (name !== 'timer-toggle' && name !== 'timer-reset') return false;
       if (!active() || state.mode !== 'classroom' || !timer()) return true;
       if (state.mode === 'personal' && (answer().correct || answer().revealed)) return true;

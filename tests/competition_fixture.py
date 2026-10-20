@@ -16,6 +16,10 @@ def field(browser, selector, value, event='change'):
 
 def enter(browser, grade=4):
     """Called after opening the personal mode; reused nicknames still require login."""
+    if browser.eval('!!WeeklyCompetition.getIdentity() && !!document.querySelector(".competition-setup")'):
+        if browser.eval('WeeklyCompetition.getIdentity().classroom.grade') == grade:
+            return
+        browser.click('[data-action="competition-change"]')
     if not browser.eval('!!ClassRanking.getSelection()'):
         field(browser, '#competition-school-query', '서울', 'input')
         browser.click('[data-action="competition-search"]')

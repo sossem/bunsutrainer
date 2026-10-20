@@ -442,3 +442,60 @@ test('Provider connection failures go to the error callback and never supply sam
   await flush(); close();
   assert.deepEqual(results, []); assert.equal(errors.length, 1); assert.match(errors[0], /permission-denied/);
 });
+
+
+test('Platform identity submits independent trainer rankings with domain-specific receipts', async()=>{
+  const env=setup(), identity=await join(env);
+  const fraction=record(identity,{trainerId:'fraction'}),decimal=record(identity,{trainerId:'decimal',score:80});
+  assert.equal((await env.repo.submit(fraction)).ok,true);
+  const original=plain([...env.remote.documents].filter(([path])=>path.startsWith('weekly')));
+  assert.equal((await env.repo.submit(decimal)).ok,true);
+  assert.deepEqual(plain([...env.remote.documents].filter(([path])=>path.startsWith('weekly'))),original);
+  assert.equal((await env.repo.submit(decimal)).ok,true);
+  const rows=[...env.remote.documents].filter(([path])=>path.startsWith('decimalWeeklyCompetitionClasses_'));
+  assert.equal(rows.length,1);assert.equal(rows[0][1].score,80);assert.equal(rows[0][1].sessions,1);
+  let ranked;const close=env.repo.watchRankings({trainerId:'decimal',kind:'class'},data=>ranked=data);await flush();assert.equal(ranked.rows[0].score,80);close();
+  assert.equal((await env.repo.submit({...decimal,trainerId:'geometry'})).ok,false);
+  assert.equal((await env.repo.submit({...decimal,trainerId:'fraction',domain:'decimal'})).ok,false);
+});
+test('Same nickname in an existing decimal account is not silently merged',async()=>{
+  const env=setup(),identity=await join(env),path=`decimalWeeklyCompetitionPlayers_${identity.weekId}/${identity.playerId}`;
+  env.remote.documents.set(path,{...identity,score:321,sessions:2});const before=plain(env.remote.documents.get(path));
+  assert.equal((await env.repo.submit(record(identity,{trainerId:'decimal'}))).ok,false);
+  assert.deepEqual(plain(env.remote.documents.get(path)),before);
+});
+
+test('Decimal permission denial preserves the record and retries exactly once after recovery', async () => {
+  const env = setup(), identity = await join(env), original = env.provider.contribute.bind(env.provider);
+  let denied = true;
+  const remote = { ...env.provider, contribute(payload) {
+    if (denied) return Promise.reject(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }));
+    return original(payload);
+  } };
+  const repo = env.api.createRepository({ clock: env.clock, storage: env.local, onlineProvider: remote });
+  assert.equal((await repo.login(classroom, identity.nickname, '123456')).ok, true);
+  const session = record(identity, { trainerId: 'decimal' }), before = plain(session);
+  const failed = await repo.submit(session);
+  assert.equal(failed.ok, false);
+  assert.match(failed.message, /소수 랭킹.*권한/);
+  assert.doesNotMatch(failed.message, /반영 결과를 아직 확인/);
+  assert.deepEqual(plain(session), before);
+  assert.equal([...env.remote.documents.keys()].some(key => key.startsWith('decimalWeekly')), false);
+  denied = false;
+  assert.equal((await repo.submit(session)).ok, true);
+  assert.equal((await repo.submit(session)).duplicate, true);
+  const score = env.remote.documents.get(`decimalWeeklyCompetitionClasses_${identity.weekId}/${identity.classroom.id}`);
+  assert.equal(score.score, session.score); assert.equal(score.sessions, 1);
+});
+
+test('Decimal ranking permission errors identify the domain without sample results', async () => {
+  const env = setup({ onlineProvider: { watch(options, onData, onError) {
+    assert.equal(options.trainerId, 'decimal');
+    onError(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }));
+    return () => {};
+  } }, setTimeout() { return 1; }, clearTimeout() {} });
+  const errors = [];
+  const close = env.repo.watchRankings({ trainerId: 'decimal' }, () => assert.fail('No fabricated ranking'), error => errors.push(error.message));
+  await flush(); close();
+  assert.equal(errors.length, 1); assert.match(errors[0], /소수 랭킹.*권한/);
+});

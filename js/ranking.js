@@ -32,7 +32,7 @@
     if (!schoolName || schoolName.length > 100 || !region || region.length > 80 || /[\/\x00-\x1f]/.test(schoolName + region)) return null;
     if (!/^\d+$/.test(gradeText) || !/^\d+$/.test(classText)) return null;
     const grade = Number(gradeText), classNumber = Number(classText);
-    if (grade < 4 || grade > 6 || classNumber < 1 || classNumber > 30) return null;
+    if (grade < (root.MathTrainerConfig?.allowGrade3?3:4) || grade > 6 || classNumber < 1 || classNumber > 30) return null;
     const className = String(classNumber);
     return { schoolName, region, grade, className, id: `[${region}] ${schoolName} ${grade}학년 ${className}반` };
   }

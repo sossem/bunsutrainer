@@ -94,7 +94,7 @@ def run():
           return entries;
         })()""")
         check('system name is Fraction Trainer', b.eval("document.title.includes('분수트레이너') && document.querySelector('.brand').textContent.includes('분수트레이너')"))
-        check('home navigation contains exactly ranking history shortcuts', b.eval("[...document.querySelectorAll('.header-links [data-action]')].map(e=>e.dataset.action).join(',')==='ranking,history,help'"))
+        check('home navigation contains platform and existing shortcuts', b.eval("[...document.querySelectorAll('.header-links [data-action]')].map(e=>e.dataset.action).join(',')==='platform-home,ranking,history,help'"))
         check('home retains only the two requested study modes', b.eval("[...document.querySelectorAll('.mode-card h2')].map(e=>e.textContent).join(',')==='선생님과 함께 수업,전국학급랭킹전'"))
         check('growth and grade description section removed', b.eval("!document.querySelector('[data-action=growth],.curriculum-section') && !document.body.textContent.includes('필요한 배움을 차곡차곡')"))
         for width, height in [(1920, 1080), (1366, 768), (768, 1024), (390, 844)]:

@@ -245,7 +245,7 @@ def run():
         # No server, fetch, ES-module loader or SDK is required when opening the HTML directly.
         b.command('Page.navigate',{'url':(ARTIFACTS.parents[1]/'index.html').as_uri()})
         b.wait_for("location.protocol==='file:' && document.readyState==='complete'")
-        b.wait('.mode-card');click('mode','classroom');click('start');b.wait('.classroom-stage')
+        b.wait('.mode-card');click('trainer','fraction');click('mode','classroom');click('start');b.wait('.classroom-stage')
         check('index.html directly opens and generates classroom problems',b.eval("!!document.querySelector('.problem-equation')"))
         b.eval('document.body.offsetHeight')
         report['consoleErrors']=b.console_errors

@@ -1,0 +1,19 @@
+/* Domain content only. Layout, controls, timers and feedback use the fraction CSS. */
+.platform-trainers .mode-card {text-decoration:none;}.platform-account{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px;padding:20px;border:1px solid var(--line);border-radius:16px;background:#fff;}
+.trainer-tabs{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0;}.platform-future{margin:24px 0;color:var(--muted);}
+.decimal-expression{display:flex;flex-direction:column;align-items:center;gap:16px;width:100%;}.decimal-number{font-size:inherit;font-variant-numeric:tabular-nums;font-weight:750;white-space:normal;overflow-wrap:anywhere;}
+.decimal-model{width:min(640px,100%);font-size:18px;text-align:center;line-height:1.5;}.decimal-model p{margin:6px 0;font-size:18px;}.decimal-strip{display:grid;grid-template-columns:repeat(10,1fr);border:2px solid var(--green);margin:8px 0;min-height:32px;}.decimal-strip span{border-right:1px solid var(--green);min-width:0;}
+.decimal-grid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));grid-template-rows:repeat(10,minmax(0,1fr));width:200px;height:200px;margin:auto;}.decimal-grid span{display:flex;align-items:center;justify-content:center;min-width:0;min-height:0;overflow:hidden;border:1px solid var(--green);font-size:10px;line-height:1;}.marked{background:var(--green);color:white;}.partial{background:var(--yellow);}
+.decimal-model table{border-collapse:collapse;width:100%;}.decimal-model th,.decimal-model td{border:1px solid var(--line);padding:8px;}.decimal-line{display:block;width:min(640px,100%);max-height:140px;}.decimal-alignment{font:30px monospace;text-align:right;white-space:pre;}
+.decimal-inputs{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;}.decimal-inputs label{display:grid;gap:8px;}.decimal-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:260px;margin:16px auto;}.decimal-options{flex-wrap:wrap;}.decimal-options .btn{font-size:22px;}
+.classroom-stage .decimal-model{max-width:720px;}.classroom-stage .decimal-model p{font-size:clamp(18px,1.5vw,26px);}.classroom-stage .decimal-model td{font-size:28px;}.classroom-stage.has-reveal .decimal-grid{width:140px;height:140px;}.classroom-stage.has-reveal .decimal-grid span{line-height:12px;font-size:8px;}
+@media(max-width:600px){.decimal-inputs .integer-input{width:125px;}.decimal-model{font-size:16px;}.decimal-options .btn{font-size:18px;}.platform-account{padding:14px;}}
+
+.decimal-expression,.decimal-model{min-width:0;white-space:normal;overflow-wrap:anywhere;}
+.platform-account-info{flex:1 1 260px;min-width:0;text-align:left;}
+.platform-account-info strong{display:block;font-size:22px;line-height:1.4;overflow-wrap:anywhere;}
+.platform-account-info p{margin:6px 0 0;color:var(--muted);overflow-wrap:anywhere;}
+.platform-account-class{display:inline-block;margin-left:8px;white-space:nowrap;}
+.platform-account-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.platform-account > p{margin:0;flex:1 1 260px;}
+@media(max-width:600px){.platform-account-actions{width:100%;}.platform-account-actions .btn{flex:1;}.platform-account-class{margin-left:0;}}

@@ -28,7 +28,7 @@
     'g6-divide': Object.freeze({ 'fraction-natural':200, 'natural-fraction':250, 'fraction-fraction':250, 'mixed-divide':300 })
   });
   function baseScore({ unit, type, difficulty } = {}) {
-    const points = type === 'all' ? 500 : ['addition', 'subtraction'].includes(type) ? 350 : TYPE_POINTS[unit]?.[type];
+    const points = type === 'all' ? 500 : ['addition', 'subtraction'].includes(type) ? 350 : TYPE_POINTS[unit]?.[type] ?? (unit?.startsWith('decimal-') && /^(D[3456]|DX)/.test(type||'') ? 200 : undefined);
     const multiplier = Object.hasOwn(RULES.difficulty, difficulty) ? RULES.difficulty[difficulty] : 1;
     return (typeof points === 'number' ? points : RULES.correct) * multiplier;
   }

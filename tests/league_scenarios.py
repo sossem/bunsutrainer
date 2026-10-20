@@ -60,6 +60,7 @@ def run():
         b.click('[data-action="home"]')
         check('League subscriptions cleaned when leaving', b.eval('__competitionFixture.listeners.size===0'))
         b.click('[data-action="mode"][data-value="personal"]')
+        if b.eval('!!document.querySelector(".competition-setup")'): b.click('[data-action="competition-change"]')
         field(b,'#competition-pin','123456','input')
         check('Entry uses plain password wording', b.eval("document.querySelector('label[for=competition-pin]').textContent==='비밀번호 입력 (숫자 6자리)' && !document.querySelector('.competition-page').textContent.includes('PIN')"))
         before = b.eval("({documents:JSON.stringify([...__competitionFixture.documents]),draft:localStorage.getItem(WeeklyCompetition.keys.drafts),history:localStorage.getItem(LearningStorage.key)})")

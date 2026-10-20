@@ -89,6 +89,7 @@
     if (!record.settings || typeof record.settings !== 'object' || Array.isArray(record.settings)) return null;
     try {
       const clean = copy({
+        ...(record.trainerId==='fraction'?{trainerId:'fraction'}:{}),
         id: record.id,
         date: new Date(record.date).toISOString(),
         settings: record.settings,
@@ -142,6 +143,7 @@
     }
   }
   function save(record) {
+    if(record?.trainerId==='decimal'||record?.domain==='decimal')return {ok:false,message:'소수 학습은 소수 기록에 저장해 주세요.'};
     initialize();
     const clean = normalize(record);
     if (!clean) return { ok: false, message: '학습 기록의 형식이 올바르지 않아 저장하지 못했어요.' };
