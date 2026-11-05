@@ -42,6 +42,15 @@ function extension() {
   };
 }
 
+test('Ranking outcome messages survive reload without adding fields to old records', () => {
+  const old = legacyRecord(), local = storage({ [KEY]: JSON.stringify({ version: 1, records: [old] }) });
+  const store = adapter(local);
+  assert.equal(store.save({ ...legacyRecord('pending'), classContributionStatus: 'pending', classContributionMessage: '반영 결과 확인 중' }).ok, true);
+  const rows = plain(adapter(local).list());
+  assert.equal(rows[0].classContributionMessage, '반영 결과 확인 중');
+  assert.deepEqual(rows[1], plain(adapter(storage({ [KEY]: JSON.stringify({ version: 1, records: [old] }) })).list()[0]));
+});
+
 test('New scoring version and large totals survive reload without changing old scores', () => {
   const old = {...legacyRecord(), ...extension(), score:71};
   const local = storage({[KEY]:JSON.stringify({version:1,records:[old]})});

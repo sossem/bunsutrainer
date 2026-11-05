@@ -58,12 +58,13 @@
   function deadline(promise, milliseconds, message) {
     let timer;
     return Promise.race([Promise.resolve(promise), new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(message)), milliseconds);
+      timer = setTimeout(() => reject(Object.assign(new Error(message), { code: 'client-timeout' })), milliseconds);
     })]).finally(() => clearTimeout(timer));
   }
   function createFirestoreProvider(db, options = {}) {
     const clock = options.clock || (() => new Date());
     const assertWeek = weekId => { if (getWeek(clock()).id !== weekId) throw new Error(expiredMessage); };
+    const increment = options.increment || (value => root.firebase.firestore.FieldValue.increment(value));
     return Object.freeze({
       async register({ identity, draftId, pin }) {
         const salt = root.crypto.randomUUID();
@@ -85,8 +86,8 @@
           const player = await transaction.get(playerRef);
           if (player.exists) throw new Error('같은 반에서 이미 사용 중인 닉네임이에요. 다른 후보를 선택해 주세요.');
           assertWeek(identity.weekId);
-          transaction.set(playerRef, { ...identity, pinCredential: credential, score: 0, sessions: 0, totalSolved: 0, correctCount: 0, createdAt: new Date(clock()).toISOString(), scoreVersion: 3 });
-          transaction.set(claimRef, { kind: 'nickname', identity, draftId, scoreVersion: 3 });
+          transaction.set(playerRef, { ...identity, pinCredential: credential, score: 0, sessions: 0, totalSolved: 0, correctCount: 0, createdAt: new Date(clock()).toISOString(), scoreVersion: 4 });
+          transaction.set(claimRef, { kind: 'nickname', identity, draftId, scoreVersion: 4 });
           return { identity, duplicate: false };
         });
       },
@@ -101,50 +102,71 @@
         return snapshot.exists ? identityFrom(snapshot.data()) : null;
       },
       async contribute(payload) {
+        payload.assertActive?.();
         if (!await this.login(payload.identity, payload.pin)) throw new Error('비밀번호로 다시 입장해 주세요.');
+        payload.assertActive?.();
         const trainerId=payload.trainerId??'fraction';
         const names = collections(payload.identity.weekId,trainerId);
         const playerRef = db.collection(names.players).doc(payload.identity.playerId);
         const classRef = db.collection(names.classes).doc(payload.identity.classroom.id);
-        const receiptRef = db.collection(names.receipts).doc(`session-${encodeURIComponent(payload.sessionId)}`);
-        return db.runTransaction(async transaction => {
-          assertWeek(payload.identity.weekId);
-          const receipt = await transaction.get(receiptRef);
-          if (receipt.exists) {
-            const saved = receipt.data();
-            if (saved.playerId !== payload.identity.playerId) throw new Error('이미 다른 닉네임으로 반영된 학습 기록이에요.');
-            return { duplicate: true };
+        const key = encodeURIComponent(payload.sessionId);
+        const receiptRef = db.collection(names.receipts).doc(`session-${key}`);
+        payload.assertActive?.();
+        assertWeek(payload.identity.weekId);
+        const receipt = await receiptRef.get({ source: 'server' });
+        if (receipt.exists) {
+          if (receipt.data().playerId !== payload.identity.playerId) throw new Error('이미 다른 닉네임으로 반영된 학습 기록이에요.');
+          return { duplicate: true };
+        }
+        // Only this student writes the player document; the class document is read just to
+        // know whether this is its first write this week (metadata is then included).
+        const [player, previousClass] = await Promise.all([playerRef.get({ source: 'server' }), classRef.get({ source: 'server' })]);
+        const previousPlayer = player.exists ? player.data() : null;
+        const registered = identityFrom(previousPlayer);
+        if (trainerId==='fraction'||player.exists) {
+          if (!registered || registered.playerId !== payload.identity.playerId || registered.weekId !== payload.identity.weekId) throw new Error('이번 주 닉네임 등록을 확인할 수 없어요. 다시 입장해 주세요.');
+        }
+        if(trainerId==='decimal'&&player.exists&&!previousPlayer.platformPlayerId){
+          const old=previousPlayer.pinCredential;
+          if(!old||await pinHash(payload.pin,old.salt)!==old.hash)throw new Error('같은 닉네임의 기존 소수 계정이 있어 자동 연결하지 않았어요. 기존 기록 확인이 필요해요.');
+        }
+        if(trainerId==='decimal'&&previousPlayer?.platformPlayerId&&previousPlayer.platformPlayerId!==payload.identity.playerId)throw new Error('계정 연결 정보를 확인해 주세요.');
+        for (const previous of [previousPlayer, previousClass.exists ? previousClass.data() : null]) {
+          for (const [field, addition] of Object.entries({ score: payload.score, sessions: 1, totalSolved: payload.total, correctCount: payload.firstCorrect })) {
+            const value = previous?.[field] ?? 0;
+            if (!integer(value) || !integer(value + addition)) throw new Error('누적 점수 정보를 확인해 주세요.');
           }
-          const player = await transaction.get(playerRef);
-          const previousClass = await transaction.get(classRef);
-          const previousPlayer = player.exists ? player.data() : null;
-          const registered = identityFrom(previousPlayer);
-          if (trainerId==='fraction'||player.exists) {
-            if (!registered || registered.playerId !== payload.identity.playerId || registered.weekId !== payload.identity.weekId) throw new Error('이번 주 닉네임 등록을 확인할 수 없어요. 다시 입장해 주세요.');
-          }
-          if(trainerId==='decimal'&&player.exists&&!previousPlayer.platformPlayerId){
-            const old=previousPlayer.pinCredential;
-            if(!old||await pinHash(payload.pin,old.salt)!==old.hash)throw new Error('같은 닉네임의 기존 소수 계정이 있어 자동 연결하지 않았어요. 기존 기록 확인이 필요해요.');
-          }
-          if(trainerId==='decimal'&&previousPlayer?.platformPlayerId&&previousPlayer.platformPlayerId!==payload.identity.playerId)throw new Error('계정 연결 정보를 확인해 주세요.');
-          const addScore = previous => {
-            const result = {};
-            for (const [key, addition] of Object.entries({ score: payload.score, sessions: 1, totalSolved: payload.total, correctCount: payload.firstCorrect })) {
-              const old = previous?.[key] ?? 0;
-              if (!integer(old) || !integer(old + addition)) throw new Error('누적 점수 정보를 확인해 주세요.');
-              result[key] = old + addition;
-            }
-            return { ...result, updatedAt: payload.date, scoreVersion: 3 };
-          };
-          const playerScore = addScore(previousPlayer), classScore = addScore(previousClass.exists ? previousClass.data() : null);
-          assertWeek(payload.identity.weekId);
-          // Existing documents only change score fields, as required by the deployed rules.
-          transaction.set(playerRef, { ...playerScore, ...(!player.exists ? { ...payload.identity, trainerId, platformPlayerId: payload.identity.playerId } : {}) }, { merge: true });
-          transaction.set(classRef, { ...(!previousClass.exists ? { ...payload.identity.classroom, trainerId, weekId: payload.identity.weekId } : {}), ...classScore }, { merge: true });
-          transaction.set(receiptRef, { kind: 'session', trainerId, sessionId: payload.sessionId, playerId: payload.identity.playerId, classId: payload.identity.classroom.id,
-            weekId: payload.identity.weekId, score: payload.score, total: payload.total, firstCorrect: payload.firstCorrect, difficulty: payload.difficulty, completedAt: payload.date, scoreVersion: 3 });
-          return { duplicate: false };
-        });
+        }
+        // Server-side increments: concurrent classmates add to the current value instead of
+        // overwriting it, so there is no read-modify-write race on the shared class document.
+        const scoreFields = { score: increment(payload.score), sessions: increment(1), totalSolved: increment(payload.total),
+          correctCount: increment(payload.firstCorrect), updatedAt: payload.date, scoreVersion: 4, lastSession: key };
+        payload.assertActive?.();
+        assertWeek(payload.identity.weekId);
+        const batch = db.batch();
+        batch.set(playerRef, { ...(!player.exists ? { ...payload.identity, trainerId, platformPlayerId: payload.identity.playerId } : {}), ...scoreFields }, { merge: true });
+        batch.set(classRef, { ...(!previousClass.exists ? { ...payload.identity.classroom, trainerId, weekId: payload.identity.weekId } : {}), ...scoreFields }, { merge: true });
+        batch.set(receiptRef, { kind: 'session', key, trainerId, sessionId: payload.sessionId, playerId: payload.identity.playerId, classId: payload.identity.classroom.id,
+          weekId: payload.identity.weekId, score: payload.score, total: payload.total, firstCorrect: payload.firstCorrect, difficulty: payload.difficulty, completedAt: payload.date, scoreVersion: 4 });
+        try { await batch.commit(); }
+        catch (error) {
+          // The same session may have been committed by a parallel tab; the receipt decides.
+          const saved = await receiptRef.get({ source: 'server' }).catch(() => null);
+          if (saved?.exists && saved.data().playerId === payload.identity.playerId) return { duplicate: true };
+          throw error;
+        }
+        return { duplicate: false };
+      },
+      async receipt(payload) {
+        const name = collections(payload.identity.weekId, payload.trainerId).receipts;
+        const snapshot = await db.collection(name).doc(`session-${encodeURIComponent(payload.sessionId)}`).get({ source: 'server' });
+        if (!snapshot.exists) return null;
+        const saved = snapshot.data();
+        if (saved.kind !== 'session' || saved.sessionId !== payload.sessionId || saved.playerId !== payload.identity.playerId
+          || saved.classId !== payload.identity.classroom.id || saved.weekId !== payload.identity.weekId
+          || saved.score !== payload.score || saved.total !== payload.total || saved.firstCorrect !== payload.firstCorrect
+          || (saved.trainerId ?? 'fraction') !== payload.trainerId) throw new Error('학습 영수증 정보가 일치하지 않아요. 기록을 확인해 주세요.');
+        return { duplicate: true };
       },
       watch({ weekId, kind, ownId, trainerId='fraction' }, onData, onError) {
         const reference = db.collection(collections(weekId,trainerId)[kind === 'individual' ? 'players' : 'classes']);
@@ -180,6 +202,7 @@
     const network = options.onlineProvider || defaultProvider, timeout = options.timeoutMs ?? 8000;
     const schedule = options.setTimeout || setTimeout, cancel = options.clearTimeout || clearTimeout;
     const memory = new Map(), blocked = new Set();
+    const submissions = new Map();
     let storage, identityEpoch = 0, idCounter = 0, authenticated = null, sessionPin = null;
     let failedLogins = 0, retryAfter = 0;
     try { storage = Object.prototype.hasOwnProperty.call(options, 'storage') ? options.storage : root.localStorage; } catch (_) { storage = null; }
@@ -301,16 +324,52 @@
       if (identity.weekId !== weekId || getWeek(record.date).id !== weekId) return failure(expiredMessage);
       if (getIdentity()?.playerId !== identity.playerId) return failure('이 기록의 닉네임과 비밀번호로 다시 입장한 뒤 반영해 주세요.');
       if ((record.scoringVersion === 3 || record.settings.grade != null) && record.settings.grade !== identity.classroom.grade) return failure('우리 반 학년의 문제만 랭킹에 반영할 수 있어요.');
+      const owner = authenticated, pin = sessionPin;
+      const assertActive = () => {
+        if (authenticated !== owner) throw new Error('입장 정보가 바뀌었어요. 이 기록의 닉네임으로 다시 입장한 뒤 반영해 주세요.');
+        if (getWeek(clock()).id !== weekId) throw new Error(expiredMessage);
+      };
+      const payload = { identity, pin, sessionId: record.id, score: record.score, total: record.total, firstCorrect: record.firstCorrect, date: record.date, difficulty, trainerId, assertActive };
+      const key = JSON.stringify([trainerId, weekId, identity.playerId, record.id]);
+      const success = result => ({ ok: true, duplicate: result.duplicate === true, message: result.duplicate ? '이미 학급과 개인 점수에 반영한 학습이에요.' : `학급과 개인 주간 점수에 각각 ${record.score}점을 더했어요.` });
+      const rejected = error => {
+        if (permissionDenied(error)) return { ...failure(`${permissionMessage(trainerId)} 학습 기록은 유지되며, 권한 문제가 해결된 후 기록에서 다시 반영할 수 있어요.`), code: 'permission-denied' };
+        const code = error?.code || 'submission-error';
+        const message = ['unavailable', 'aborted', 'deadline-exceeded'].includes(code)
+          ? '서버 연결 또는 동시 제출로 반영을 확인하지 못했어요. 기록에서 다시 시도해 주세요.'
+          : `온라인 점수 반영 결과를 확인하지 못했어요. 기록에서 다시 시도할 수 있어요. ${error.message || ''}`;
+        return { ...failure(message), code };
+      };
       try {
         const remote = await deadline(provider(), timeout, '온라인 연결을 확인하지 못했어요. 기록에서 다시 시도할 수 있어요.');
-        if (getWeek(clock()).id !== weekId) return failure(expiredMessage);
-        const result = await deadline(remote.contribute({ identity, pin: sessionPin, sessionId: record.id, score: record.score, total: record.total, firstCorrect: record.firstCorrect, date: record.date, difficulty, trainerId }), timeout,
-          '반영 결과를 아직 확인하지 못했어요. 기록에서 다시 시도해도 점수는 한 번만 반영돼요.');
-        return { ok: true, duplicate: result.duplicate === true, message: result.duplicate ? '이미 학급과 개인 점수에 반영한 학습이에요.' : `학급과 개인 주간 점수에 각각 ${record.score}점을 더했어요.` };
-      } catch (error) {
-        if (permissionDenied(error)) return failure(`${permissionMessage(trainerId)} 학습 기록은 유지되며, 권한 문제가 해결된 후 기록에서 다시 반영할 수 있어요.`);
-        return failure(`온라인 점수 반영 결과를 확인하지 못했어요. 기록에서 다시 시도할 수 있어요. ${error.message || ''}`);
-      }
+        assertActive();
+        let completion = submissions.get(key);
+        const joined = !!completion;
+        if (!completion) {
+          completion = Promise.resolve().then(() => { assertActive(); return remote.contribute(payload); }).then(success, rejected);
+          submissions.set(key, completion);
+          completion.then(() => { if (submissions.get(key) === completion) submissions.delete(key); });
+        }
+        try {
+          const result = await deadline(completion, timeout, '반영 결과를 확인 중이에요.');
+          return joined && result.ok ? success({ duplicate: true }) : result;
+        }
+        catch (error) {
+          if (error.code !== 'client-timeout') throw error;
+          // A client timeout does not cancel Firestore. Confirm with a server-only receipt read.
+          if (typeof remote.receipt === 'function') {
+            try {
+              const confirmed = await deadline(remote.receipt(payload), timeout, '영수증 확인 시간이 초과됐어요.');
+              if (confirmed) {
+                if (submissions.get(key) === completion) submissions.delete(key);
+                return success(confirmed);
+              }
+            } catch (_) { /* Missing/unavailable evidence is never reported as success. */ }
+          }
+          return { ok: false, pending: true, code: 'client-timeout', completion,
+            message: '반영 결과를 아직 확인하지 못했어요. 기록에서 다시 시도해도 점수는 한 번만 반영돼요.' };
+        }
+      } catch (error) { return rejected(error); }
     }
     function watchRankings({ week = 'current', kind = 'class', trainerId='fraction' } = {}, onData, onError = () => {}) {
       let active = true, unsubscribe = null, timer = null, revision = 0;

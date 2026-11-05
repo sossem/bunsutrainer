@@ -7,6 +7,7 @@
     const answer = () => state.session.responses[state.session.index];
     const timer = () => state.session?.timers?.[state.session.index];
     const busy = new Set();
+    const attempts = new Map();
     let pendingReward = null;
     const celebrated = new Map();
     function pause() { timer()?.pause(); }
@@ -121,28 +122,52 @@
       if (s.competition) record.competition = JSON.parse(JSON.stringify(s.competition));
       record.classScoreContribution = record.completed && record.total >= 5 && s.competition ? s.score : 0;
       record.classContributionStatus = record.rankingEnabled && record.completed ? 'pending' : 'not-joined';
+      if (!record.rankingEnabled || !record.completed) {
+        record.classContributionMessage = s.isReview ? '오답 다시 풀기는 랭킹에 반영하지 않아요.'
+          : !record.completed ? '세트를 끝까지 마친 학습만 랭킹에 반영해요.'
+          : s.trainerId === 'decimal' && s.problems.some(p => !p.rankEligibility) ? '이 회차에는 랭킹 대상이 아닌 소수 유형이 포함되어 있어요. 학습 기록은 저장했어요.'
+          : '랭킹전에 입장한 학습만 온라인 점수에 반영해요.';
+      }
       record.expEarned = 0; record.badgesEarned = [];
     }
     async function contribute(record) {
-      if (!record || busy.has(record.id) || !['pending', 'failed'].includes(record.classContributionStatus)) return;
-      busy.add(record.id);
+      const key = record && `${record.trainerId || 'fraction'}:${record.id}`;
+      if (!record || busy.has(key) || !['pending', 'failed'].includes(record.classContributionStatus)) return;
+      busy.add(key);
+      const attempt = {}; attempts.set(key, attempt);
       const history=root.TrainerHistory?.forTrainer(record.trainerId)||root.LearningStorage;
+      const applyResult = result => {
+        const stored = history.list().find(r => r.id === record.id);
+        if (!result.ok && (attempts.get(key) !== attempt || stored?.classContributionStatus === 'synced')) return;
+        record.classContributionStatus = result.ok ? record.rankingMode === 'demo' ? 'demo' : 'synced' : result.pending ? 'pending' : 'failed';
+        record.classContributionMessage = result.message;
+        const saved = stored ? history.save(record) : { ok: true };
+        if (state.record?.id === record.id && (state.record.trainerId || 'fraction') === (record.trainerId || 'fraction')) {
+          state.record.classContributionStatus = record.classContributionStatus;
+          state.record.classContributionMessage = record.classContributionMessage;
+        }
+        if ((state.trainerId || 'fraction') === (record.trainerId || 'fraction') && ['results', 'history'].includes(state.view)) {
+          notify(result.message + (saved.ok ? '' : ` ${saved.message}`)); render();
+        }
+      };
       try {
         const result = record.competition ? await (root.MathPlatform?root.MathPlatform.submit(record):root.WeeklyCompetition.submit(record)) : await Ranking.updateClassScore(record, { mode: record.rankingMode });
-        record.classContributionStatus = result.ok ? record.rankingMode === 'demo' ? 'demo' : 'synced' : 'failed';
-        const saved = history.list().some(r => r.id === record.id) ? history.save(record) : { ok: true };
-        notify(result.message + (saved.ok ? '' : ` ${saved.message}`));
+        applyResult(result);
+        if (result.pending && result.completion) {
+          Promise.resolve(result.completion).then(applyResult, () => applyResult({ ok: false, message: '랭킹 반영을 확인하지 못했어요. 기록에서 다시 시도해 주세요.' }))
+            .catch(() => { /* Storage/render errors must not cause an unhandled rejection. */ })
+            .finally(() => { if (attempts.get(key) === attempt) attempts.delete(key); });
+        } else if (attempts.get(key) === attempt) attempts.delete(key);
       } catch (_) {
-        record.classContributionStatus = 'failed';
-        if (history.list().some(r => r.id === record.id)) history.save(record);
-        notify('랭킹 반영을 마치지 못했어요. 학습 기록에서 다시 시도해 주세요.');
+        applyResult({ ok: false, message: '랭킹 반영을 마치지 못했어요. 학습 기록에서 다시 시도해 주세요.' });
+        if (attempts.get(key) === attempt) attempts.delete(key);
       }
-      finally { busy.delete(record.id); if (state.view === 'results' || state.view === 'history') render(); }
+      finally { busy.delete(key); if (state.view === 'results' || state.view === 'history') render(); }
     }
     function recordHtml(r) {
-      const status = { pending: '랭킹에 반영 중', synced: '랭킹 반영 완료', failed: '랭킹 반영 재시도 필요', demo: '데모 반영 완료', 'not-joined': '랭킹 반영 안 함' };
+      const status = { pending: '랭킹 반영 결과 확인 중', synced: '랭킹 반영 완료', failed: '랭킹 반영 재시도 필요', demo: '데모 반영 완료', 'not-joined': '랭킹 반영 안 함' };
       if (r.gameVersion !== 1) return '';
-      return `<div class="record-growth">${r.competition ? `<span>${E(r.competition.nickname)} · 학습 점수 ${r.score}점</span>` : r.gamificationEnabled ? `<span>이전 기록 점수 ${r.score}점</span>` : ''}${r.gamificationEnabled ? `<span>최대 연속 정답 ${r.comboMax}개</span>` : ''}${r.rankingEnabled ? `<span>${E(status[r.classContributionStatus] || '')} (${r.classScoreContribution}점)</span>${['failed','pending'].includes(r.classContributionStatus) ? button('contribute','반영 다시 시도','btn-small','',`data-value="${E(r.id)}" ${busy.has(r.id) ? 'disabled' : ''}`) : ''}` : ''}</div>`;
+      return `<div class="record-growth">${r.competition ? `<span>${E(r.competition.nickname)} · 학습 점수 ${r.score}점</span>` : r.gamificationEnabled ? `<span>이전 기록 점수 ${r.score}점</span>` : ''}${r.gamificationEnabled ? `<span>최대 연속 정답 ${r.comboMax}개</span>` : ''}${r.classContributionStatus === 'not-joined' && r.classContributionMessage ? `<span>${E(r.classContributionMessage)}</span>` : ''}${r.rankingEnabled ? `<span>${E(status[r.classContributionStatus] || '')} (${r.classScoreContribution}점)</span>${['failed','pending'].includes(r.classContributionStatus) && r.classContributionMessage ? `<span>${E(r.classContributionMessage)}</span>` : ''}${['failed','pending'].includes(r.classContributionStatus) ? button('contribute','반영 다시 시도','btn-small','',`data-value="${E(r.id)}" ${busy.has(`${r.trainerId || 'fraction'}:${r.id}`) ? 'disabled' : ''}`) : ''}` : ''}</div>`;
     }
     function action(name, value) {
       if (name === 'contribute') { contribute(state.record?.id === value ? state.record : (root.TrainerHistory?.forTrainer(state.trainerId)||root.LearningStorage).list().find(r => r.id === value)); return true; }

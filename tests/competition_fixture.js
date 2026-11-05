@@ -11,7 +11,24 @@
     snapshot(ref) { return { id: ref.id, exists: documents.has(ref.path), data: () => clone(documents.get(ref.path)) }; }
   };
   let queue = Promise.resolve();
+  const merged = (old, value, merge) => {
+    const next = merge ? { ...old } : {};
+    for (const [field, item] of Object.entries(value)) next[field] = item && typeof item === 'object' && '__increment' in item ? (old?.[field] ?? 0) + item.__increment : item;
+    return next;
+  };
   const db = {
+    batch() {
+      const writes = [];
+      return {
+        set(ref, value, options) { writes.push({ ref, value: clone(value), options }); },
+        async commit() {
+          await queue;
+          if (fixture.failWrites) throw new Error('Test database unavailable');
+          for (const { ref, value, options } of writes) { fixture.operations.push(['set', ref.path]); documents.set(ref.path, merged(documents.get(ref.path), value, options?.merge)); }
+          if (writes.length) { fixture.persist(); fixture.emit(); }
+        }
+      };
+    },
     collection(name) {
       return {
         doc(id) {
@@ -44,7 +61,7 @@
         });
         for (const { ref, value, options } of writes) {
           fixture.operations.push(['set', ref.path]);
-          documents.set(ref.path, options?.merge ? { ...documents.get(ref.path), ...value } : value);
+          documents.set(ref.path, merged(documents.get(ref.path), value, options?.merge));
         }
         if (writes.length) { fixture.persist(); fixture.emit(); }
         return result;
@@ -57,7 +74,7 @@
     configurable: true, get: () => competition,
     set(api) {
       const clock = () => new Date(Date.now() + fixture.offset);
-      fixture.provider = api.createFirestoreProvider(db, { clock });
+      fixture.provider = api.createFirestoreProvider(db, { clock, increment: value => ({ __increment: value }) });
       competition = { ...api, ...api.createRepository({ onlineProvider: fixture.provider, clock }) };
     }
   });

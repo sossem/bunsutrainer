@@ -31,6 +31,7 @@
       rankingMode: (value) => ['online', 'demo'].includes(value),
       classScoreContribution: nonnegative,
       classContributionStatus: (value) => ['pending', 'synced', 'failed', 'demo', 'not-joined'].includes(value),
+      classContributionMessage: (value) => shortText(value, 500),
       gameVersion: (value) => value === 1,
       scoringVersion: (value) => value === 2 || value === 3
     };

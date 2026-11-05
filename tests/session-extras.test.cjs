@@ -35,7 +35,7 @@ function fixture({ mode = 'personal', elapsedSeconds = 0, autoReveal = false, re
   vm.runInContext(read('session-extras'), context);
   const extras = context.SessionExtras.create({ state, button: () => '', esc: String, render() {}, notify() {} });
   extras.sync();
-  return { extras, state, expire: () => callbacks.onExpire(), store: context.LearningStorage,
+  return { extras, state, context, expire: () => callbacks.onExpire(), store: context.LearningStorage,
     saves: () => saves, timerCreations: () => timerCreations, resolveContribution, rejectContribution };
 }
 
@@ -141,4 +141,65 @@ test('A retained pending record is saved after contribution and duplicate in-fli
   assert.equal(record.classContributionStatus, 'demo');
   assert.equal(f.saves(), 1);
   assert.equal(f.store.list().length, 1);
+});
+
+test('Unconfirmed contribution stays pending and a late server response updates saved history', async () => {
+  const record = { id: 'late', classContributionStatus: 'pending', rankingMode: 'online', competition: {} };
+  const f = fixture({ record });
+  let settle;
+  const completion = new Promise(resolve => { settle = resolve; });
+  const request = f.extras.contribute(record);
+  f.resolveContribution({ ok: false, pending: true, message: 'unconfirmed', completion });
+  await request;
+  assert.equal(record.classContributionStatus, 'pending');
+  f.state.view = 'home';
+  settle({ ok: true, message: 'confirmed' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.store.list()[0].classContributionStatus, 'synced');
+});
+
+test('Late completion never resurrects deleted history', async () => {
+  const record = { id: 'deleted-late', classContributionStatus: 'pending', competition: {} };
+  const f = fixture({ record }); let settle;
+  const completion = new Promise(resolve => { settle = resolve; });
+  const request = f.extras.contribute(record);
+  f.resolveContribution({ ok: false, pending: true, message: 'waiting', completion });
+  await request; f.store.clear();
+  settle({ ok: true, message: 'stored' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.store.list().length, 0);
+});
+
+test('Decimal excluded types and incomplete sessions retain policy and explain non-submission', () => {
+  const f = fixture(), s = f.state.session;
+  s.trainerId = 'decimal'; s.problems = [{ rankEligibility: false }]; s.isReview = false;
+  f.extras.prepare(s);
+  s.responses[0].attempts = [{}];
+  const record = { total: 5, correct: 0 };
+  f.extras.complete(record, true);
+  assert.equal(record.rankingEnabled, false);
+  assert.equal(record.classContributionStatus, 'not-joined');
+  assert.match(f.extras.recordHtml(record), /랭킹 대상이 아닌 소수 유형/);
+  s.settings.rankingEnabled = true;
+  f.extras.complete(record, false);
+  assert.equal(record.classContributionStatus, 'not-joined');
+  assert.match(f.extras.recordHtml(record), /끝까지/);
+});
+
+test('Changing trainer while submitting keeps same-ID histories and late results isolated', async () => {
+  const f = fixture(); const resolvers = {}, stores = {};
+  for (const trainerId of ['fraction', 'decimal']) {
+    const row = { id: 'same-id', trainerId, competition: {}, classContributionStatus: 'pending' };
+    stores[trainerId] = { row, list: () => [stores[trainerId].row], save: value => { stores[trainerId].row = value; return { ok: true }; } };
+  }
+  f.context.TrainerHistory = { forTrainer: id => stores[id] };
+  f.context.MathPlatform = { submit: row => new Promise(resolve => { resolvers[row.trainerId] = resolve; }) };
+  const a = f.extras.contribute(stores.fraction.row);
+  f.state.trainerId = 'decimal'; f.state.record = stores.decimal.row;
+  const b = f.extras.contribute(stores.decimal.row);
+  resolvers.decimal({ ok: true, message: 'decimal stored' }); await b;
+  resolvers.fraction({ ok: false, message: 'fraction retry' }); await a;
+  assert.equal(stores.fraction.row.classContributionStatus, 'failed');
+  assert.equal(stores.decimal.row.classContributionStatus, 'synced');
+  assert.equal(f.state.record.classContributionMessage, 'decimal stored');
 });

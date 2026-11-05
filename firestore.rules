@@ -7,32 +7,38 @@ service cloud.firestore {
     function isDecimalPlayers(coll) { return coll.matches('decimalWeeklyCompetitionPlayers_[0-9]{8}'); }
     function isLegacy(coll)  { return coll.matches('(classRankings|classGrowthRankings)_[0-9]{8}'); }
     function weekOf(coll)    { return coll.split('_')[1]; }
+    // 'weeklyCompetitionClasses_20261102' -> 'weeklyCompetition'
+    function prefixOf(coll)  { return coll.split('_')[0].replace('(Classes|Players|Receipts)$', ''); }
+    function docPath(coll, kind, id) {
+      return /databases/$(database)/documents/$(prefixOf(coll) + kind + '_' + weekOf(coll))/$(id);
+    }
 
-    function isOneSession(after, before) {
-      let solved = after.totalSolved - before.totalSolved;
-      return after.score is int && after.sessions is int
-        && after.totalSolved is int && after.correctCount is int
-        && after.sessions == before.sessions + 1
-        && solved >= 5 && solved <= 200
-        && after.correctCount >= before.correctCount
-        && after.correctCount - before.correctCount <= solved
-        && after.score >= before.score
-        && after.score - before.score <= solved * 2800;
+    // A score write (class or player) must be paired, in the same batch, with the creation
+    // of the session receipt named by lastSession. Increments are applied to the current
+    // server value, so concurrent classmates never invalidate each other.
+    function linkedReceipt(coll) {
+      let key = request.resource.data.lastSession;
+      let path = docPath(coll, 'Receipts', 'session-' + key);
+      return key is string && !exists(path) && existsAfter(path) ? getAfter(path).data : null;
+    }
+    function addsReceipt(r, after, score, sessions, solved, correct) {
+      return r != null && r.kind == 'session'
+        && after.score is int && after.sessions is int && after.totalSolved is int && after.correctCount is int
+        && after.score == score + r.score && after.sessions == sessions + 1
+        && after.totalSolved == solved + r.total && after.correctCount == correct + r.firstCorrect;
     }
     function onlyScoreFieldsChange() {
       return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['score', 'sessions', 'totalSolved', 'correctCount', 'updatedAt', 'scoreVersion']);
-    }
-    function validFirstScore(d) {
-      return d.score is int && d.sessions == 1
-        && d.totalSolved is int && d.totalSolved >= 5 && d.totalSolved <= 200
-        && d.correctCount is int && d.correctCount >= 0 && d.correctCount <= d.totalSolved
-        && d.score >= 0 && d.score <= d.totalSolved * 2800;
+        .hasOnly(['score', 'sessions', 'totalSolved', 'correctCount', 'updatedAt', 'scoreVersion', 'lastSession']);
     }
     function validNewClass(coll, docId) {
       let d = request.resource.data;
-      return d.id == docId && d.weekId == weekOf(coll) && validFirstScore(d);
+      let r = linkedReceipt(coll);
+      return d.id == docId && d.weekId == weekOf(coll)
+        && addsReceipt(r, d, 0, 0, 0, 0) && r.classId == docId;
     }
+    // Weekly nickname registration (PIN hash, renewed every week). A nickname is unique per
+    // class and week because the player document id is derived from it and is never replaced.
     function validNewPlayer(coll, docId) {
       let d = request.resource.data;
       return d.playerId == docId && d.weekId == weekOf(coll)
@@ -43,15 +49,36 @@ service cloud.firestore {
     function validNewDecimalPlayer(coll, docId) {
       let d = request.resource.data;
       let identity = get(/databases/$(database)/documents/$('weeklyCompetitionPlayers_' + weekOf(coll))/$(docId)).data;
+      let r = linkedReceipt(coll);
       return d.playerId == docId && d.weekId == weekOf(coll)
         && d.trainerId == 'decimal' && d.platformPlayerId == docId
         && d.playerId == identity.playerId && d.weekId == identity.weekId
         && d.nickname == identity.nickname && d.classroom == identity.classroom
-        && validFirstScore(d);
+        && addsReceipt(r, d, 0, 0, 0, 0) && r.playerId == docId;
     }
-    function validNewReceipt(docId) {
-      return docId.matches('(nickname|session)-.+')
-        && request.resource.data.kind in ['nickname', 'session'];
+    function validScoreUpdate(coll, docId) {
+      let d = request.resource.data;
+      let r = linkedReceipt(coll);
+      return onlyScoreFieldsChange()
+        && addsReceipt(r, d, resource.data.score, resource.data.sessions, resource.data.totalSolved, resource.data.correctCount)
+        && (isClasses(coll) ? r.classId == docId : r.playerId == docId);
+    }
+    function validSessionReceipt(coll, docId) {
+      let d = request.resource.data;
+      return docId == 'session-' + d.key && d.weekId == weekOf(coll)
+        && d.playerId is string && d.classId is string
+        && d.total is int && d.total >= 5 && d.total <= 200
+        && d.firstCorrect is int && d.firstCorrect >= 0 && d.firstCorrect <= d.total
+        && d.score is int && d.score >= 0 && d.score <= d.total * 2800
+        && getAfter(docPath(coll, 'Classes', d.classId)).data.lastSession == d.key
+        && getAfter(docPath(coll, 'Players', d.playerId)).data.lastSession == d.key;
+    }
+    // A nickname claim is only written together with the new player document it names.
+    function validNicknameReceipt(coll, docId) {
+      let d = request.resource.data;
+      let path = docPath(coll, 'Players', d.identity.playerId);
+      return docId.matches('nickname-.+') && d.identity.playerId is string
+        && !exists(path) && existsAfter(path);
     }
     match /{coll}/{docId} {
       allow read: if isClasses(coll) || isPlayers(coll) || isLegacy(coll);
@@ -59,10 +86,9 @@ service cloud.firestore {
       allow create: if (isClasses(coll) && validNewClass(coll, docId))
                     || (isPlayers(coll) && !isDecimalPlayers(coll) && validNewPlayer(coll, docId))
                     || (isDecimalPlayers(coll) && validNewDecimalPlayer(coll, docId))
-                    || (isReceipts(coll) && validNewReceipt(docId));
-      allow update: if (isClasses(coll) || isPlayers(coll))
-                    && onlyScoreFieldsChange()
-                    && isOneSession(request.resource.data, resource.data);
+                    || (isReceipts(coll) && request.resource.data.kind == 'nickname' && validNicknameReceipt(coll, docId))
+                    || (isReceipts(coll) && request.resource.data.kind == 'session' && validSessionReceipt(coll, docId));
+      allow update: if (isClasses(coll) || isPlayers(coll)) && validScoreUpdate(coll, docId);
       // No deletes, receipt updates, or legacy writes.
     }
   }

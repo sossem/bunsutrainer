@@ -12,7 +12,8 @@ function localStorage(initial = {}) {
   return { values, getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
 }
 function moduleAt(context = {}) {
-  const sandbox = vm.createContext({ setTimeout, clearTimeout, crypto: require("node:crypto").webcrypto, TextEncoder, ...context });
+  const firebase = { firestore: { FieldValue: { increment: value => ({ __increment: value }) } } };
+  const sandbox = vm.createContext({ setTimeout, clearTimeout, crypto: require("node:crypto").webcrypto, TextEncoder, firebase, ...context });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/gamification.js'), 'utf8'), sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/competition.js'), 'utf8'), sandbox);
   return sandbox.WeeklyCompetition;
@@ -22,7 +23,24 @@ function firestore() {
   const snapshot = ref => ({ id: ref.id, exists: documents.has(ref.path), data: () => plain(documents.get(ref.path)) });
   const emit = () => { for (const listener of listeners) listener(); };
   let transactionQueue = Promise.resolve();
+  // Mirrors Firestore: increments add to the stored value (missing fields count as 0).
+  const merged = (old, value, merge) => {
+    const next = merge ? { ...old } : {};
+    for (const [field, item] of Object.entries(value)) next[field] = item && typeof item === 'object' && '__increment' in item ? (old?.[field] ?? 0) + item.__increment : item;
+    return next;
+  };
   const db = {
+    batch() {
+      const writes = [];
+      return {
+        set(ref, value, options) { writes.push({ ref, value, options }); },
+        async commit() {
+          await transactionQueue;
+          for (const { ref, value, options } of writes) { operations.push(['set', ref.path]); documents.set(ref.path, merged(documents.get(ref.path), value, options?.merge)); }
+          if (writes.length) emit();
+        }
+      };
+    },
     collection(name) {
       return {
         doc(id) {
@@ -49,7 +67,7 @@ function firestore() {
           async get(ref) { assert.equal(writes.length, 0, 'All Firestore reads precede writes'); operations.push(['get', ref.path]); return snapshot(ref); },
           set(ref, value, options) { writes.push({ ref, value: plain(value), options }); }
         });
-        for (const { ref, value, options } of writes) { operations.push(['set', ref.path]); documents.set(ref.path, options?.merge ? { ...documents.get(ref.path), ...value } : value); }
+        for (const { ref, value, options } of writes) { operations.push(['set', ref.path]); documents.set(ref.path, merged(documents.get(ref.path), value, options?.merge)); }
         if (writes.length) emit();
         return result;
       });
@@ -325,7 +343,9 @@ test('Lost contribution response and retry still award only once', async () => {
     ...env.provider, async contribute(payload) { const saved = await env.provider.contribute(payload); if (first) { first = false; await new Promise(resolve => setTimeout(resolve, 1500)); } return saved; }
   } });
   await repo.login(classroom, identity.nickname, '123456');
-  assert.equal((await repo.submit(record(identity))).ok, false);
+  const confirmed = await repo.submit(record(identity));
+  assert.equal(confirmed.ok, true, 'Server receipt confirms a committed score despite a delayed response');
+  assert.equal(confirmed.duplicate, true);
   await new Promise(resolve => setTimeout(resolve, 1700));
   const retried = await repo.submit(record(identity));
   assert.equal(retried.ok, true); assert.equal(retried.duplicate, true);
@@ -498,4 +518,76 @@ test('Decimal ranking permission errors identify the domain without sample resul
   const close = env.repo.watchRankings({ trainerId: 'decimal' }, () => assert.fail('No fabricated ranking'), error => errors.push(error.message));
   await flush(); close();
   assert.equal(errors.length, 1); assert.match(errors[0], /소수 랭킹.*권한/);
+});
+
+test('Account changes while connecting prevent a stale contribution from being dispatched', async () => {
+  const env = setup(), identity = await join(env);
+  let release, delay = false, calls = 0;
+  const remote = { ...env.provider, contribute() { calls++; return Promise.resolve({ duplicate: false }); } };
+  const repo = env.api.createRepository({ clock: env.clock, storage: env.local, onlineProvider: () => delay ? new Promise(resolve => { release = () => resolve(remote); }) : remote });
+  await repo.login(classroom, identity.nickname, '123456');
+  delay = true;
+  const result = repo.submit(record(identity));
+  repo.clearIdentity(); release();
+  assert.equal((await result).ok, false);
+  assert.equal(calls, 0);
+});
+
+for (const trainerId of ['fraction', 'decimal']) {
+  test(`${trainerId}: uncommitted timeout shares one request, then settles and retries once`, async () => {
+    const env = setup(), identity = await join(env);
+    let release, calls = 0;
+    const gate = new Promise(resolve => { release = resolve; });
+    const remote = { ...env.provider, async contribute(payload) { calls++; await gate; return env.provider.contribute(payload); } };
+    const repo = env.api.createRepository({ clock: env.clock, storage: env.local, onlineProvider: remote, timeoutMs: 500 });
+    assert.equal((await repo.login(classroom, identity.nickname, '123456')).ok, true);
+    const session = record(identity, { trainerId });
+    const pending = await repo.submit(session);
+    assert.equal(pending.pending, true); assert.equal(pending.ok, false);
+    const retry = repo.submit(session); release();
+    assert.equal((await pending.completion).ok, true);
+    assert.equal((await retry).ok, true); assert.equal(calls, 1);
+    assert.equal((await repo.submit(session)).duplicate, true);
+    const prefix = trainerId === 'decimal' ? 'decimalWeekly' : 'weekly';
+    assert.equal(env.remote.documents.get(`${prefix}CompetitionClasses_${identity.weekId}/${identity.classroom.id}`).score, 65);
+  });
+
+  test(`${trainerId}: unavailable submission recovers, while logout before transaction prevents writes`, async () => {
+    const env = setup(), identity = await join(env);
+    let fail = true;
+    const remote = { ...env.provider, contribute(payload) {
+      if (fail) return Promise.reject(Object.assign(new Error('offline'), { code: 'unavailable' }));
+      return env.provider.contribute(payload);
+    } };
+    const repo = env.api.createRepository({ clock: env.clock, storage: env.local, onlineProvider: remote });
+    await repo.login(classroom, identity.nickname, '123456');
+    const session = record(identity, { trainerId });
+    assert.equal((await repo.submit(session)).code, 'unavailable');
+    fail = false;
+    assert.equal((await repo.submit(session)).ok, true);
+    const before = plain([...env.remote.documents]);
+    const attempt = repo.submit({ ...session, id: 'logout-before-write' });
+    repo.clearIdentity();
+    assert.equal((await attempt).ok, false);
+    assert.deepEqual(plain([...env.remote.documents]), before);
+  });
+}
+
+test('Receipt recovery requires server evidence matching the complete session identity', async () => {
+  const env = setup(), identity = await join(env);
+  const payload = { identity, trainerId: 'decimal', sessionId: 'receipt-check', score: 65, total: 5, firstCorrect: 5 };
+  assert.equal(await env.provider.receipt(payload), null);
+  await env.repo.submit(record(identity, { id: payload.sessionId, trainerId: 'decimal' }));
+  assert.equal((await env.provider.receipt(payload)).duplicate, true);
+  await assert.rejects(env.provider.receipt({ ...payload, score: 66 }), /영수증/);
+  await assert.rejects(env.provider.receipt({ ...payload, firstCorrect: 4 }), /영수증/);
+});
+
+test('A nickname registered this week cannot be registered again, even with the same PIN', async () => {
+  const env = setup(), identity = await join(env);
+  const other = setup({ storage: localStorage() });
+  const provider = other.api.createFirestoreProvider(env.remote.db, { clock: env.clock });
+  await assert.rejects(provider.register({ identity, draftId: 'another-draft', pin: '123456' }), /이미 사용 중/);
+  await assert.rejects(provider.register({ identity, draftId: 'another-draft', pin: '654321' }), /이미 사용 중/);
+  assert.equal(env.remote.documents.get(`weeklyCompetitionReceipts_20260914/nickname-another-draft`), undefined);
 });
