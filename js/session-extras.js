@@ -62,7 +62,6 @@
       pendingReward = null;
       s.combo = 0; s.comboMax = 0; s.score = 0; s.timers = [];
       s.competition = s.mode === 'personal' && !s.isReview ? root.WeeklyCompetition.getIdentity() : null;
-      if(s.trainerId==='decimal'&&s.problems.some(p=>!p.rankEligibility))s.competition=null;
       s.classroom = s.competition?.classroom || Ranking.getSelection();
       s.settings.rankingEnabled = !!s.competition;
       s.settings.gamificationEnabled = s.mode === 'personal' && !s.isReview;
@@ -78,7 +77,7 @@
         a.solveSeconds = Math.max(0, (performance.now() - s.questionStartedAt) / 1000);
         const reward = Game.scoreAnswer({ correct: true, firstAttempt: a.firstCorrect,
           hintUsed: a.hintUsed, revealed: a.revealed, timedOut: a.timedOut,
-          speedEnabled: !!s.competition && (s.trainerId!=='decimal'||s.problems[s.index].speedEligible), solveSeconds: a.solveSeconds, unit: s.settings.unit, type: s.settings.type, difficulty: s.settings.difficulty, combo: s.combo,
+          speedEnabled: !!s.competition && (s.trainerId!=='decimal'||s.problems[s.index].speedEligible), solveSeconds: a.solveSeconds, unit: s.settings.unit, type: s.trainerId === 'decimal' ? s.problems[s.index].type : s.settings.type, difficulty: s.settings.difficulty, combo: s.combo,
           timerEnabled: !!time?.enabled && !a.timerReset, remainingRatio: time ? 1 - time.elapsedSeconds / time.seconds : 0 });
         if (s.settings.gamificationEnabled) {
           a.score = reward.score; s.score += reward.score; s.combo = reward.combo;
@@ -125,7 +124,6 @@
       if (!record.rankingEnabled || !record.completed) {
         record.classContributionMessage = s.isReview ? '오답 다시 풀기는 랭킹에 반영하지 않아요.'
           : !record.completed ? '세트를 끝까지 마친 학습만 랭킹에 반영해요.'
-          : s.trainerId === 'decimal' && s.problems.some(p => !p.rankEligibility) ? '이 회차에는 랭킹 대상이 아닌 소수 유형이 포함되어 있어요. 학습 기록은 저장했어요.'
           : '랭킹전에 입장한 학습만 온라인 점수에 반영해요.';
       }
       record.expEarned = 0; record.badgesEarned = [];

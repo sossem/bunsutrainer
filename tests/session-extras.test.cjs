@@ -170,17 +170,20 @@ test('Late completion never resurrects deleted history', async () => {
   assert.equal(f.store.list().length, 0);
 });
 
-test('Decimal excluded types and incomplete sessions retain policy and explain non-submission', () => {
+test('Every decimal type joins the ranking and scores by its own problem type', () => {
   const f = fixture(), s = f.state.session;
-  s.trainerId = 'decimal'; s.problems = [{ rankEligibility: false }]; s.isReview = false;
+  f.context.WeeklyCompetition.getIdentity = () => ({ classroom: { id: 'c' } });
+  s.trainerId = 'decimal'; s.isReview = false; s.settings.unit = 'decimal-meaning'; s.settings.type = 'all';
+  s.problems = [{ type: 'D3-06', rankEligibility: true }];
   f.extras.prepare(s);
-  s.responses[0].attempts = [{}];
-  const record = { total: 5, correct: 0 };
-  f.extras.complete(record, true);
-  assert.equal(record.rankingEnabled, false);
-  assert.equal(record.classContributionStatus, 'not-joined');
-  assert.match(f.extras.recordHtml(record), /랭킹 대상이 아닌 소수 유형/);
-  s.settings.rankingEnabled = true;
+  assert.ok(s.competition, 'Comparison/recognition types no longer drop the session from the ranking');
+  assert.equal(s.settings.rankingEnabled, true);
+  const a = s.responses[0]; a.firstCorrect = true;
+  f.extras.submitted(a, { correct: true, valid: true });
+  // Simple comparison: 100 x normal(2) + first attempt 50, even inside a mixed ('all') session.
+  assert.equal(a.score, 250);
+  a.attempts = [{}];
+  const record = { total: 5, correct: 1 };
   f.extras.complete(record, false);
   assert.equal(record.classContributionStatus, 'not-joined');
   assert.match(f.extras.recordHtml(record), /끝까지/);

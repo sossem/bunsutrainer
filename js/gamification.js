@@ -27,8 +27,14 @@
     'g5-multiply': Object.freeze({ 'natural-fraction':150, 'fraction-natural':150, 'proper-multiply':200, 'mixed-multiply':300, cancellation:250 }),
     'g6-divide': Object.freeze({ 'fraction-natural':200, 'natural-fraction':250, 'fraction-fraction':250, 'mixed-divide':300 })
   });
+  // Decimal points per problem type: quick recognition/comparison < conversion < arithmetic < division.
+  const DECIMAL_POINTS = Object.freeze(Object.fromEntries([
+    [100, ['D3-01', 'D3-03', 'D3-05', 'D3-06', 'D4-03', 'D4-05', 'D4-06']],
+    [150, ['D3-02', 'D3-04', 'D4-01', 'D4-02', 'D4-04', 'D5-C1', 'D5-C2', 'D5-C3', 'DX-01']],
+    [250, ['D6A-01', 'D6A-02', 'D6A-03', 'D6A-04', 'D6A-05', 'D6A-06', 'D6A-07', 'D6B-01', 'D6B-02', 'D6B-03', 'D6B-04', 'D6B-05', 'D6B-06', 'D6B-07', 'DX-02']]
+  ].flatMap(([points, ids]) => ids.map(id => [id, points])))); // Other decimal types: 200.
   function baseScore({ unit, type, difficulty } = {}) {
-    const points = type === 'all' ? 500 : ['addition', 'subtraction'].includes(type) ? 350 : TYPE_POINTS[unit]?.[type] ?? (unit?.startsWith('decimal-') && /^(D[3456]|DX)/.test(type||'') ? 200 : undefined);
+    const points = type === 'all' ? 500 : ['addition', 'subtraction'].includes(type) ? 350 : TYPE_POINTS[unit]?.[type] ?? (unit?.startsWith('decimal-') && /^(D[3456]|DX)/.test(type||'') ? DECIMAL_POINTS[type] ?? 200 : undefined);
     const multiplier = Object.hasOwn(RULES.difficulty, difficulty) ? RULES.difficulty[difficulty] : 1;
     return (typeof points === 'number' ? points : RULES.correct) * multiplier;
   }
@@ -152,7 +158,7 @@
     const saved = persist();
     return { ...saved, expEarned, newBadges: copy(newBadges), profile: profile(), alreadyApplied: false };
   }
-  const api = Object.freeze({ RULES, TYPE_POINTS, baseScore, maxAnswerScore, scoreAnswer, classContribution, profile, applySession, key: KEY });
+  const api = Object.freeze({ RULES, TYPE_POINTS, DECIMAL_POINTS, baseScore, maxAnswerScore, scoreAnswer, classContribution, profile, applySession, key: KEY });
   root.LearningGame = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);

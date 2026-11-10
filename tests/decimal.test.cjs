@@ -17,3 +17,20 @@ if(t.id==='D6A-05')assert.match(p.answer.replace('.',''),/[1-9]0+[1-9]/);
 if(t.id==='D6A-04')assert.ok(D.parse(p.answer).scale>D.parse(p.operands[0].text).scale);
 }});
 test('49 types, grade boundaries and explicit average prerequisite',()=>{assert.equal(D.types.length,49);assert.equal(new Set(D.types.map(t=>t.id)).size,49);for(const grade of [3,4,5,6])for(const unit of D.curriculum.find(g=>g.grade===grade).units){const ps=D.generateSet({grade,unit:unit.id,type:'all',count:20,difficulty:'normal'});assert.ok(ps.every(p=>p.grade===grade));}assert.throws(()=>D.generateSet({grade:5,unit:'decimal-connection5',type:'DX-02',count:5,difficulty:'challenge'}));});
+
+test('Every decimal type is ranking-eligible and comparisons are mostly unequal', () => {
+  const D = require('../js/decimal-engine.js'), G = require('../js/gamification.js');
+  for (const t of D.types) for (const difficulty of ['easy', 'normal', 'challenge']) for (let seed = 1; seed < 60; seed++)
+    assert.equal(D.generate(t.id, seed, difficulty).rankEligibility, true, `${t.id} ${difficulty} ${seed}`);
+  for (const type of ['D3-06', 'D4-06']) for (const difficulty of ['easy', 'normal', 'challenge']) {
+    let symbols = 0, equal = 0;
+    for (let seed = 1; seed <= 2000; seed++) {
+      const p = D.generate(type, seed, difficulty);
+      if (p.answerKind === 'order') assert.equal(new Set(p.choices).size, 3);
+      else { symbols++; if (p.answer === '=') equal++; }
+    }
+    assert.ok(symbols > 300 && equal / symbols < 0.2, `${type} ${difficulty}: ${equal}/${symbols} equal`);
+  }
+  const points = type => G.baseScore({ unit: 'decimal-x', type, difficulty: 'easy' });
+  assert.ok(points('D3-06') < points('D4-02') && points('D4-02') < points('D4-A1') && points('D4-A1') < points('D6B-03'));
+});
